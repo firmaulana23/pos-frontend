@@ -100,6 +100,49 @@ export interface TransactionsResponse {
   limit: number;
 }
 
+// Menu Types
+export interface Category {
+  id: number;
+  name: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AddOnItem {
+  id: number;
+  menu_item_id: number | null;
+  name: string;
+  description: string;
+  price: number;
+  cogs: number;
+  margin: number;
+  is_available: boolean;
+}
+
+export interface MenuItem {
+  id: number;
+  category_id: number;
+  name: string;
+  description: string;
+  price: number;
+  cogs: number;
+  margin: number;
+  is_available: boolean;
+  image_url: string;
+  created_at: string;
+  updated_at: string;
+  category: Category;
+  add_ons?: AddOnItem[];
+}
+
+export interface MenuItemsResponse {
+  data: MenuItem[];
+  total?: number;
+  page?: number;
+  limit?: number;
+}
+
 export interface ApiError {
   message: string;
   code?: string;
@@ -281,6 +324,87 @@ export const transactionsAPI = {
 
   deleteTransaction: async (id: number): Promise<{ message: string }> => {
     return apiCall<{ message: string }>(`/transactions/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
+// Admin Menu API endpoints
+export const adminMenuAPI = {
+  getMenuItems: async (categoryId?: number, page: number = 1, limit: number = 10): Promise<MenuItemsResponse> => {
+    const params = new URLSearchParams();
+    if (categoryId) params.append('category_id', categoryId.toString());
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+
+    const endpoint = `/menu/items${params.toString() ? `?${params.toString()}` : ''}`;
+    return apiCall<MenuItemsResponse>(endpoint);
+  },
+
+  getMenuItem: async (id: number): Promise<MenuItem> => {
+    return apiCall<MenuItem>(`/menu/items/${id}`);
+  },
+
+  createMenuItem: async (data: {
+    category_id: number;
+    name: string;
+    description: string;
+    price: number;
+    cogs: number;
+    is_available: boolean;
+  }): Promise<MenuItem> => {
+    return apiCall<MenuItem>('/menu/items', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateMenuItem: async (id: number, data: {
+    category_id?: number;
+    name?: string;
+    description?: string;
+    price?: number;
+    cogs?: number;
+    is_available?: boolean;
+  }): Promise<MenuItem> => {
+    return apiCall<MenuItem>(`/menu/items/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteMenuItem: async (id: number): Promise<{ message: string }> => {
+    return apiCall<{ message: string }>(`/menu/items/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  getCategories: async (): Promise<Category[]> => {
+    return apiCall<Category[]>('/menu/categories');
+  },
+
+  createCategory: async (data: {
+    name: string;
+    description: string;
+  }): Promise<Category> => {
+    return apiCall<Category>('/menu/categories', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateCategory: async (id: number, data: {
+    name?: string;
+    description?: string;
+  }): Promise<Category> => {
+    return apiCall<Category>(`/menu/categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteCategory: async (id: number): Promise<{ message: string }> => {
+    return apiCall<{ message: string }>(`/menu/categories/${id}`, {
       method: 'DELETE',
     });
   },
