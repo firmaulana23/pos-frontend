@@ -51,6 +51,55 @@ export interface DashboardStats {
   }>;
 }
 
+// Transaction Types
+export interface TransactionItem {
+  id: number;
+  menu_item_id: number;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+  menu_item: {
+    id: number;
+    name: string;
+    price: number;
+  };
+  add_ons: Array<{
+    id: number;
+    add_on_id: number;
+    quantity: number;
+    unit_price: number;
+    total_price: number;
+    add_on: {
+      id: number;
+      name: string;
+      price: number;
+    };
+  }>;
+}
+
+export interface Transaction {
+  id: number;
+  transaction_no: string;
+  customer_name: string | null;
+  status: 'pending' | 'paid';
+  payment_method: string;
+  sub_total: number;
+  tax: number;
+  discount: number;
+  total: number;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  items: TransactionItem[];
+}
+
+export interface TransactionsResponse {
+  data: Transaction[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export interface ApiError {
   message: string;
   code?: string;
@@ -176,5 +225,63 @@ export const menuAPI = {
 
   getPaymentMethods: async () => {
     return apiCall('/public/payment-methods');
+  },
+};
+
+// Transactions API endpoints
+export const transactionsAPI = {
+  getTransactions: async (status?: 'pending' | 'paid', limit: number = 10, offset: number = 0): Promise<TransactionsResponse> => {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    params.append('limit', limit.toString());
+    params.append('offset', offset.toString());
+
+    const endpoint = `/transactions${params.toString() ? `?${params.toString()}` : ''}`;
+    return apiCall<TransactionsResponse>(endpoint);
+  },
+
+  getTransaction: async (id: number): Promise<Transaction> => {
+    return apiCall<Transaction>(`/transactions/${id}`);
+  },
+
+  createTransaction: async (data: {
+    customer_name?: string;
+    items: Array<{
+      menu_item_id: number;
+      quantity: number;
+      add_ons?: Array<{ add_on_id: number; quantity: number }>;
+    }>;
+    payment_method?: string;
+    tax?: number;
+    discount_percentage?: number;
+  }): Promise<{ success: boolean; data: Transaction }> => {
+    return apiCall<{ success: boolean; data: Transaction }>('/transactions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  payTransaction: async (id: number, paymentMethod: string): Promise<Transaction> => {
+    return apiCall<Transaction>(`/transactions/${id}/pay`, {
+      method: 'PUT',
+      body: JSON.stringify({ payment_method: paymentMethod }),
+    });
+  },
+
+  updateTransaction: async (id: number, data: {
+    customer_name?: string;
+    tax?: number;
+    discount_percentage?: number;
+  }): Promise<Transaction> => {
+    return apiCall<Transaction>(`/transactions/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteTransaction: async (id: number): Promise<{ message: string }> => {
+    return apiCall<{ message: string }>(`/transactions/${id}`, {
+      method: 'DELETE',
+    });
   },
 };
