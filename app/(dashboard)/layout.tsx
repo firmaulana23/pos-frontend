@@ -11,13 +11,14 @@ interface DashboardLayoutProps {
 
 const allNavItems = [
   { href: '/dashboard', icon: '📊', label: 'Dashboard', badge: null, roles: ['admin', 'manager', 'cashier'] },
+  { href: '/dashboard/pos', icon: '🛒', label: 'POS', badge: null, roles: ['admin', 'manager', 'cashier'] },
   { href: '/dashboard/transactions', icon: '💳', label: 'Transactions', badge: null, roles: ['admin', 'manager', 'cashier'] },
   { href: '/dashboard/menu', icon: '🍽️', label: 'Menu', badge: null, roles: ['admin', 'manager'] },
   { href: '/dashboard/reports', icon: '📈', label: 'Reports', badge: null, roles: ['admin', 'manager'] },
   { href: '/dashboard/expenses', icon: '💰', label: 'Expenses', badge: null, roles: ['admin', 'manager'] },
   { href: '/dashboard/stock', icon: '📦', label: 'Stock', badge: null, roles: ['admin', 'manager'] },
-  { href: '/dashboard/promos', icon: '🎟️', label: 'Promos', badge: null, roles: ['admin', 'manager'] },
-  { href: '/dashboard/members', icon: '🧑‍🤝‍🧑', label: 'Members', badge: null, roles: ['admin', 'manager'] },
+  { href: '/dashboard/promos', icon: '🎟️', label: 'Promos', badge: null, roles: ['admin', 'manager', 'cashier'] },
+  { href: '/dashboard/members', icon: '🧑‍🤝‍🧑', label: 'Members', badge: null, roles: ['admin', 'manager', 'cashier'] },
   { href: '/dashboard/users', icon: '👥', label: 'Users', badge: null, roles: ['admin'] },
   { href: '/dashboard/settings', icon: '⚙️', label: 'Settings', badge: null, roles: ['admin'] },
 ];
