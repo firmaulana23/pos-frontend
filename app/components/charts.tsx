@@ -1,5 +1,7 @@
 'use client';
 
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
+
 interface ChartDataPoint {
   label: string;
   value: number;
@@ -24,65 +26,76 @@ export const SimpleLineChart = ({ data, title, height = 300, color = '#3b82f6' }
     );
   }
 
-  const maxValue = Math.max(...data.map((d) => d.value));
-  const minValue = Math.min(...data.map((d) => d.value));
-  const range = maxValue - minValue || 1;
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
 
-  // Calculate SVG path for line chart
-  const width = 100;
-  const svgHeight = height;
-  const padding = 40;
-
-  const points = data.map((d, i) => {
-    const x = (i / (data.length - 1 || 1)) * (width - padding * 2) + padding;
-    const y = svgHeight - ((d.value - minValue) / range) * (svgHeight - padding * 2) - padding;
-    return { x, y, value: d.value };
-  });
-
-  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white dark:bg-slate-800 p-3 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg">
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">{label}</p>
+          <p className="text-sm font-bold" style={{ color: payload[0].color || color }}>
+            {formatCurrency(payload[0].value)}
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
-    <div className="card">
-      {title && <h3 className="text-lg font-semibold mb-4">{title}</h3>}
-      <div className="overflow-x-auto">
-        <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} className="mx-auto">
-          {/* Grid lines */}
-          {Array.from({ length: 5 }).map((_, i) => {
-            const y = (height / 5) * (i + 1);
-            return (
-              <line
-                key={`grid-${i}`}
-                x1="0"
-                y1={y}
-                x2={width}
-                y2={y}
-                stroke="#e5e7eb"
-                strokeDasharray="4"
-                strokeWidth="1"
-              />
-            );
-          })}
-
-          {/* Line */}
-          <path d={pathD} stroke={color} strokeWidth="2" fill="none" />
-
-          {/* Points */}
-          {points.map((p, i) => (
-            <circle key={`point-${i}`} cx={p.x} cy={p.y} r="3" fill={color} />
-          ))}
-
-          {/* X axis */}
-          <line x1="0" y1={height - padding + 20} x2={width} y2={height - padding + 20} stroke="#d1d5db" strokeWidth="2" />
-        </svg>
-
-        {/* Labels */}
-        <div className="flex justify-between mt-4 px-10 text-xs text-slate-600">
-          {data.map((d, i) => (
-            <span key={i} className="truncate">
-              {d.label}
-            </span>
-          ))}
-        </div>
+    <div className="card w-full p-0 sm:p-4">
+      {title && <h3 className="text-lg font-semibold mb-4 text-slate-900 dark:text-white px-4 pt-4 sm:p-0">{title}</h3>}
+      <div style={{ width: '100%', height: height }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart
+            data={data}
+            margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+          >
+            <defs>
+              <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={color} stopOpacity={0.3} />
+                <stop offset="95%" stopColor={color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" className="dark:stroke-slate-700" />
+            <XAxis
+              dataKey="label"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: '#64748b', fontSize: 12 }}
+              dy={10}
+            />
+            <YAxis
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: '#64748b', fontSize: 12 }}
+              tickFormatter={(value) => {
+                if (value === 0) return '0';
+                if (value >= 1000000) return `Rp ${(value / 1000000).toFixed(1)}M`;
+                if (value >= 1000) return `Rp ${(value / 1000).toFixed(0)}K`;
+                return `Rp ${value}`;
+              }}
+              width={80}
+            />
+            <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: '#f1f5f9', opacity: 0.1 }} />
+            <Area
+              type="monotone"
+              dataKey="value"
+              stroke={color}
+              strokeWidth={3}
+              fillOpacity={1}
+              fill="url(#colorValue)"
+              activeDot={{ r: 6, fill: color, stroke: '#fff', strokeWidth: 2 }}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );

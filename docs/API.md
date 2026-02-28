@@ -618,6 +618,28 @@ Content-Type: application/json
 }
 ```
 
+**Response:**
+```json
+{
+    "id": 5,
+    "category_id": 1,
+    "name": "New Coffee",
+    "description": "Delicious new coffee",
+    "price": 25000,
+    "cogs": 12000,
+    "margin": 52.0,
+    "is_available": true,
+    "image_url": "",
+    "created_at": "2025-07-10T14:00:00.000000+07:00",
+    "updated_at": "2025-07-10T14:00:00.000000+07:00",
+    "category": {
+        "id": 1,
+        "name": "Coffee",
+        "description": "Hot and cold coffee beverages"
+    }
+}
+```
+
 ### Update Category (Admin/Manager)
 ```http
 PUT /api/v1/menu/categories/{id}
@@ -812,6 +834,7 @@ Authorization: Bearer <token>
 
 ### Get Add-ons for Specific Menu Item
 ```http
+GET /api/v1/menu-item-add-ons/{menu_item_id}
 GET /api/v1/public/menu-item-add-ons/{menu_item_id}
 ```
 
@@ -1061,7 +1084,10 @@ Content-Type: application/json
 
 {
     "full_name": "Alice Johnson",
-    "email": "alice@example.com"
+    "email": "alice@example.com",
+    "phone_number": "1234567890",
+    "discount": 10,
+    "expired_date": "2027-01-24T10:00:00Z"
 }
 ```
 
@@ -1073,6 +1099,7 @@ Response (201):
     "email": "alice@example.com",
     "member_code": "82471023",
     "is_active": true,
+    "expired_date": "2027-01-24T10:00:00Z",
     "created_at": "2026-01-24T10:00:00Z"
 }
 ```
@@ -1202,6 +1229,36 @@ Authorization: Bearer <token>
 ```json
 {
     "message": "Member deleted successfully"
+}
+```
+
+### Redeem Points
+```http
+POST /api/v1/members/{id}/redeem
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+    "menu_item_id": 1,
+    "quantity": 1
+}
+```
+
+**Response:**
+```json
+{
+    "message": "Points redeemed successfully",
+    "member": {
+        "id": 1,
+        "full_name": "Alice Johnson",
+        "phone_number": "1234567890",
+        "card_number": "82471023",
+        "points": 85,
+        "discount": 10,
+        "expired_date": "2027-01-24T10:00:00Z",
+        "created_at": "2026-01-24T10:00:00Z",
+        "updated_at": "2026-01-25T10:00:00Z"
+    }
 }
 ```
 
@@ -2103,7 +2160,8 @@ Authorization: Bearer <admin_or_manager_token>
     "total_cogs": 28850,
     "gross_profit": 28850,
     "gross_margin_percent": 50.0,
-    "total_expenses": 15000,
+    "total_operational_expenses": 15000,
+    "total_raw_material_expenses": 500000,
     "net_profit": 13850,
     "total_orders": 3,
     "pending_orders": 1,
@@ -2260,8 +2318,20 @@ Content-Type: application/json
 
 {
     "name": "Coffee Beans",
-    "unit": "kg",
-    "stock": 10
+    "unit_of_measure": "kg",
+    "current_stock": 10
+}
+```
+
+**Response:**
+```json
+{
+    "id": 1,
+    "name": "Coffee Beans",
+    "unit_of_measure": "kg",
+    "current_stock": 10,
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
 }
 ```
 
@@ -2762,6 +2832,20 @@ The POS system includes a web-based admin dashboard accessible through the follo
 - User management requires admin role only
 
 ### Frontend Architecture
+(Architecture documentation placeholder)
+
+## Reports
+
+### Get Report
+```http
+GET /api/v1/report
+Authorization: Bearer <admin_or_manager_token>
+```
+
+**Response:**
+```text
+Report endpoint
+```
 - **JavaScript Modules**: Modular JS files for each feature
 - **API Integration**: All frontend calls use `/api/v1` base URL
 - **Real-time Updates**: Dashboard auto-refreshes and cross-tab synchronization

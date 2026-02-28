@@ -35,14 +35,8 @@ yarn-error.log*
 <<<<<<< HEAD
 
 # local env files
-.env*.local
+.env.local
 .env
-=======
-.pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
->>>>>>> 63d8976 (Initial commit from Create Next App)
 
 # vercel
 .vercel

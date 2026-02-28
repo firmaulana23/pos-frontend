@@ -9,13 +9,17 @@ interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
-const navItems = [
-  { href: '/dashboard', icon: '📊', label: 'Dashboard', badge: null },
-  { href: '/dashboard/transactions', icon: '💳', label: 'Transactions', badge: null },
-  { href: '/dashboard/menu', icon: '🍽️', label: 'Menu', badge: null },
-  { href: '/dashboard/reports', icon: '📈', label: 'Reports', badge: null },
-  { href: '/dashboard/expenses', icon: '💰', label: 'Expenses', badge: null },
-  { href: '/dashboard/settings', icon: '⚙️', label: 'Settings', badge: null },
+const allNavItems = [
+  { href: '/dashboard', icon: '📊', label: 'Dashboard', badge: null, roles: ['admin', 'manager', 'cashier'] },
+  { href: '/dashboard/transactions', icon: '💳', label: 'Transactions', badge: null, roles: ['admin', 'manager', 'cashier'] },
+  { href: '/dashboard/menu', icon: '🍽️', label: 'Menu', badge: null, roles: ['admin', 'manager'] },
+  { href: '/dashboard/reports', icon: '📈', label: 'Reports', badge: null, roles: ['admin', 'manager'] },
+  { href: '/dashboard/expenses', icon: '💰', label: 'Expenses', badge: null, roles: ['admin', 'manager'] },
+  { href: '/dashboard/stock', icon: '📦', label: 'Stock', badge: null, roles: ['admin', 'manager'] },
+  { href: '/dashboard/promos', icon: '🎟️', label: 'Promos', badge: null, roles: ['admin', 'manager'] },
+  { href: '/dashboard/members', icon: '🧑‍🤝‍🧑', label: 'Members', badge: null, roles: ['admin', 'manager'] },
+  { href: '/dashboard/users', icon: '👥', label: 'Users', badge: null, roles: ['admin'] },
+  { href: '/dashboard/settings', icon: '⚙️', label: 'Settings', badge: null, roles: ['admin'] },
 ];
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
@@ -23,6 +27,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [navItems, setNavItems] = useState(allNavItems);
+
+  useEffect(() => {
+    if (user) {
+      setNavItems(allNavItems.filter(item => item.roles.includes(user.role)));
+    }
+  }, [user]);
+
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -86,11 +98,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
-                  isActive
-                    ? 'bg-blue-50 dark:bg-blue-900 text-blue-600 dark:text-blue-200'
-                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                }`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${isActive
+                  ? 'bg-blue-50 dark:bg-blue-900 text-blue-600 dark:text-blue-200'
+                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
                 title={!sidebarOpen ? item.label : ''}
               >
                 <span className="text-xl flex-shrink-0">{item.icon}</span>

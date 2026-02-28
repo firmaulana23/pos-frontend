@@ -155,7 +155,7 @@ export default function DashboardPage() {
 
   const topItemsData = (stats.top_menu_items || []).map((item) => ({
     label: item.name,
-    value: item.total_revenue,
+    value: item.total_sold,
   }));
 
   // Transform payment method data with colors
@@ -198,11 +198,10 @@ export default function DashboardPage() {
                   setCustomStartDate('');
                   setCustomEndDate('');
                 }}
-                className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                  dateRange === range
+                className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${dateRange === range
                     ? 'bg-blue-500 text-white shadow-md'
                     : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-50 hover:bg-slate-200 dark:hover:bg-slate-700'
-                }`}
+                  }`}
               >
                 {range === 'all' ? 'All Time' : range === 'today' ? 'Today' : range === 'week' ? 'Last 7 Days' : 'This Month'}
               </button>
@@ -270,31 +269,31 @@ export default function DashboardPage() {
         <Stat
           label="Total Sales"
           value={formatCurrency(stats.total_sales)}
-          icon="💰"
+          // icon="💰"
           trend={calculateTrend(stats.total_sales, prevStats?.total_sales)}
         />
         <Stat
           label="Gross Profit"
           value={formatCurrency(stats.gross_profit)}
-          icon="📈"
+          // icon="📈"
           trend={calculateTrend(stats.gross_profit, prevStats?.gross_profit)}
         />
         <Stat
           label="Net Profit"
           value={formatCurrency(stats.net_profit)}
-          icon="💎"
+          // icon="💎"
           trend={calculateTrend(stats.net_profit, prevStats?.net_profit)}
         />
         <Stat
           label="Profit Margin"
           value={`${stats.gross_margin_percent.toFixed(1)}%`}
-          icon="📊"
+          // icon="📊"
           trend={calculateTrend(stats.gross_margin_percent, prevStats?.gross_margin_percent)}
         />
       </div>
 
       {/* Orders overview */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="card">
           <div className="flex items-center justify-between">
             <div>
@@ -324,6 +323,15 @@ export default function DashboardPage() {
             <div className="text-4xl bg-yellow-100 dark:bg-yellow-900 p-4 rounded-lg">⏳</div>
           </div>
         </div>
+
+        <div className="card">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">Total Expenses</p>
+              <p className="text-3xl font-bold text-black dark:text-white mt-2">{formatCurrency(stats.total_operational_expenses + stats.total_raw_material_expenses)}</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Financial breakdown */}
@@ -350,8 +358,12 @@ export default function DashboardPage() {
               <span className="font-semibold text-green-900 dark:text-green-200">{formatCurrency(stats.gross_profit)}</span>
             </div>
             <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
-              <span className="text-sm text-slate-600 dark:text-slate-400">Total Expenses</span>
-              <span className="font-semibold text-slate-900 dark:text-white">{formatCurrency(stats.total_expenses)}</span>
+              <span className="text-sm text-slate-600 dark:text-slate-400">Operational Expenses</span>
+              <span className="font-semibold text-slate-900 dark:text-white">{formatCurrency(stats.total_operational_expenses)}</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+              <span className="text-sm text-slate-600 dark:text-slate-400">Raw Material Expenses</span>
+              <span className="font-semibold text-slate-900 dark:text-white">{formatCurrency(stats.total_raw_material_expenses)}</span>
             </div>
             <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900 rounded-lg border border-blue-200 dark:border-blue-700">
               <span className="text-sm text-blue-900 dark:text-blue-200 font-medium">Net Profit</span>
@@ -366,29 +378,12 @@ export default function DashboardPage() {
         <SimpleBarChart data={topItemsData} title="Top Selling Menu Items" color="#8b5cf6" />
 
         {/* Payment methods distribution */}
-        <SimpleDonutChart 
-          data={paymentMethodsData} 
+        <SimpleDonutChart
+          data={paymentMethodsData}
           title="Sales by Payment Method"
           formatValue={formatCurrency}
         />
       </div>
-
-      {/* Top products and add-ons */}
-      {stats.top_add_ons && stats.top_add_ons.length > 0 && (
-        <Card header={<h3 className="text-lg font-semibold">Top Add-ons</h3>}>
-          <div className="space-y-3">
-            {stats.top_add_ons.map((addon, index) => (
-              <div key={index} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
-                <div>
-                  <p className="font-medium text-slate-900 dark:text-white">{addon.name}</p>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">Sold: {addon.total_sold}</p>
-                </div>
-                <p className="font-semibold text-slate-900 dark:text-white">{formatCurrency(addon.total_revenue)}</p>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
     </div>
   );
 }
