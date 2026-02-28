@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { adminMenuAPI, MenuItem, Category } from '@/app/lib/api';
+import { adminMenuAPI, MenuItem, Category, stockAPI, RawMaterial, MenuItemMaterial } from '@/app/lib/api';
 import { Card, LoadingSkeleton, Button } from '@/app/components/ui';
 import { useProtectedRoute } from '@/app/lib/auth';
 
@@ -36,6 +36,14 @@ export default function MenuPage() {
     cogs: 0,
     is_available: true,
   });
+
+  // Recipe Modal States
+  const [showRecipeModal, setShowRecipeModal] = useState(false);
+  const [selectedRecipeItem, setSelectedRecipeItem] = useState<MenuItem | null>(null);
+  const [recipeMaterials, setRecipeMaterials] = useState<MenuItemMaterial[]>([]);
+  const [availableRawMaterials, setAvailableRawMaterials] = useState<RawMaterial[]>([]);
+  const [recipeFormData, setRecipeFormData] = useState({ raw_material_id: 0, quantity: 0 });
+  const [recipeLoading, setRecipeLoading] = useState(false);
 
   // Fetch categories
   const fetchCategories = async () => {
@@ -204,6 +212,67 @@ export default function MenuPage() {
     setShowEditModal(true);
   };
 
+  // Recipe Functions
+  const openRecipeModal = async (item: MenuItem) => {
+    setSelectedRecipeItem(item);
+    setShowRecipeModal(true);
+    setRecipeLoading(true);
+    setError(null);
+    setRecipeFormData({ raw_material_id: 0, quantity: 0 });
+    try {
+      const [rawMatRes, recipeMatRes] = await Promise.all([
+        stockAPI.getRawMaterials(),
+        stockAPI.getMenuItemMaterials(item.id)
+      ]);
+      setAvailableRawMaterials(rawMatRes || []);
+      setRecipeMaterials(recipeMatRes || []);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load recipe data');
+    } finally {
+      setRecipeLoading(false);
+    }
+  };
+
+  const handleAddRecipeMaterial = async () => {
+    if (!selectedRecipeItem || !recipeFormData.raw_material_id || recipeFormData.quantity <= 0) {
+      setError('Please select a material and enter a valid positive quantity');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      setError(null);
+      await stockAPI.addMenuItemMaterial({
+        menu_item_id: selectedRecipeItem.id,
+        raw_material_id: recipeFormData.raw_material_id,
+        quantity_used: recipeFormData.quantity
+      });
+      // refresh materials list
+      const recipeMatRes = await stockAPI.getMenuItemMaterials(selectedRecipeItem.id);
+      setRecipeMaterials(recipeMatRes || []);
+      setRecipeFormData({ raw_material_id: 0, quantity: 0 });
+    } catch (err: any) {
+      setError(err.message || 'Failed to add recipe material');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRemoveRecipeMaterial = async (rawMaterialId: number) => {
+    if (!selectedRecipeItem) return;
+    try {
+      setSubmitting(true);
+      setError(null);
+      await stockAPI.removeMenuItemMaterial(selectedRecipeItem.id, rawMaterialId);
+      // refresh materials list
+      const recipeMatRes = await stockAPI.getMenuItemMaterials(selectedRecipeItem.id);
+      setRecipeMaterials(recipeMatRes || []);
+    } catch (err: any) {
+      setError(err.message || 'Failed to remove recipe material');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // Client-side filtering is removed in favor of backend search queries
   const filteredItems = items;
 
@@ -370,14 +439,20 @@ export default function MenuPage() {
                       <button
                         onClick={() => handleToggleAvailability(item)}
                         className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${item.is_available
-                            ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 hover:bg-green-200'
-                            : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 hover:bg-red-200'
+                          ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 hover:bg-green-200'
+                          : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 hover:bg-red-200'
                           }`}
                       >
                         {item.is_available ? '✓ Available' : '✕ Hidden'}
                       </button>
                     </td>
                     <td className="px-6 py-4 text-right space-x-2">
+                      <button
+                        onClick={() => openRecipeModal(item)}
+                        className="inline-flex items-center px-3 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900 rounded transition-colors"
+                      >
+                        🍲 Recipe
+                      </button>
                       <button
                         onClick={() => openEditModal(item)}
                         className="inline-flex items-center px-3 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900 rounded transition-colors"
@@ -660,6 +735,121 @@ export default function MenuPage() {
                 className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50"
               >
                 {submitting ? '⏳ Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Recipe Modal */}
+      {showRecipeModal && selectedRecipeItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-200 dark:border-slate-700">
+              <div>
+                <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+                  Recipe for {selectedRecipeItem.name}
+                </h3>
+                <p className="text-sm text-slate-500">Manage required raw materials per portion</p>
+              </div>
+              <button
+                onClick={() => setShowRecipeModal(false)}
+                className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto mb-4 pr-2 space-y-4">
+              {/* Add Material Form */}
+              <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg flex items-end gap-3 border border-slate-200 dark:border-slate-700">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Raw Material *
+                  </label>
+                  <select
+                    value={recipeFormData.raw_material_id}
+                    onChange={(e) => setRecipeFormData({ ...recipeFormData, raw_material_id: parseInt(e.target.value) })}
+                    className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value={0}>Select a material...</option>
+                    {availableRawMaterials.map((mat) => (
+                      <option key={mat.id} value={mat.id}>
+                        {mat.name} ({mat.unit_of_measure})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="w-32">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Qty Used *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0"
+                    value={recipeFormData.quantity || ''}
+                    onChange={(e) => setRecipeFormData({ ...recipeFormData, quantity: parseFloat(e.target.value) })}
+                    className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <button
+                  onClick={handleAddRecipeMaterial}
+                  disabled={submitting}
+                  className="px-4 py-2 text-sm font-medium text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {submitting ? '...' : '+ Add'}
+                </button>
+              </div>
+
+              {/* Recipe List Table */}
+              <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-100 dark:bg-slate-800">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-900 dark:text-white">Material</th>
+                      <th className="px-4 py-3 text-right font-semibold text-slate-900 dark:text-white">Quantity Used</th>
+                      <th className="px-4 py-3 text-center font-semibold text-slate-900 dark:text-white">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recipeLoading ? (
+                      <tr><td colSpan={3} className="px-4 py-6 text-center text-slate-500">Loading recipe...</td></tr>
+                    ) : recipeMaterials.length === 0 ? (
+                      <tr><td colSpan={3} className="px-4 py-6 text-center text-slate-500">No materials added yet.</td></tr>
+                    ) : (
+                      recipeMaterials.map((rm) => (
+                        <tr key={rm.raw_material_id} className="border-t border-slate-200 dark:border-slate-700">
+                          <td className="px-4 py-3 text-slate-900 dark:text-slate-50">
+                            {rm.raw_material?.name} <span className="text-slate-500 text-xs">({rm.raw_material?.unit_of_measure})</span>
+                          </td>
+                          <td className="px-4 py-3 text-right font-medium text-emerald-600 dark:text-emerald-400">
+                            {rm.quantity_used}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => handleRemoveRecipeMaterial(rm.raw_material_id)}
+                              disabled={submitting}
+                              className="text-red-500 hover:text-red-600 font-medium px-2 py-1 bg-red-50 hover:bg-red-100 dark:bg-red-900/30 dark:hover:bg-red-900/50 rounded transition-colors disabled:opacity-50 text-xs"
+                            >
+                              ✕ Remove
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+              <button
+                onClick={() => setShowRecipeModal(false)}
+                className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+              >
+                Close Formulation
               </button>
             </div>
           </Card>

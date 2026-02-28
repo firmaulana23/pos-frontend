@@ -586,6 +586,14 @@ export interface DailySummary {
   };
 }
 
+export interface MenuItemMaterial {
+  menu_item_id: number;
+  raw_material_id: number;
+  quantity_used: number;
+  raw_material?: RawMaterial;
+  menu_item?: MenuItem;
+}
+
 // Users API endpoints
 export const usersAPI = {
   getUsers: async (): Promise<User[]> => {
@@ -803,5 +811,23 @@ export const stockAPI = {
 
     const endpoint = `/stock/summary?${params.toString()}`;
     return apiCall<DailySummary[]>(endpoint);
+  },
+
+  getMenuItemMaterials: async (menuItemId: number): Promise<MenuItemMaterial[]> => {
+    const response = await apiCall<{ success: boolean, data: MenuItemMaterial[] }>(`/stock/menu-item-materials/${menuItemId}`);
+    return response.data;
+  },
+
+  addMenuItemMaterial: async (data: { menu_item_id: number; raw_material_id: number; quantity_used: number }): Promise<void> => {
+    return apiCall<void>('/stock/menu-item-materials', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  removeMenuItemMaterial: async (menuItemId: number, rawMaterialId: number): Promise<void> => {
+    return apiCall<void>(`/stock/menu-item-materials/${menuItemId}/${rawMaterialId}`, {
+      method: 'DELETE',
+    });
   },
 };
