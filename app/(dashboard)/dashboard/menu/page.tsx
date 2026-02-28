@@ -51,13 +51,14 @@ export default function MenuPage() {
   };
 
   // Fetch menu items
-  const fetchItems = async (pageNum: number) => {
+  const fetchItems = async (pageNum: number, currentSearch?: string) => {
     try {
       setLoading(true);
       setError(null);
 
       const categoryId = selectedCategory === 'all' ? undefined : (selectedCategory as number);
-      const response = await adminMenuAPI.getMenuItems(categoryId, pageNum, 10);
+      const activeSearch = currentSearch !== undefined ? currentSearch : searchTerm;
+      const response = await adminMenuAPI.getMenuItems(categoryId, pageNum, 10, activeSearch || undefined);
 
       setItems(response.data);
       setTotalPages(response.total ? Math.ceil(response.total / 10) : 1);
@@ -73,13 +74,11 @@ export default function MenuPage() {
   }, []);
 
   useEffect(() => {
-    fetchItems(1);
-    setPage(1);
-  }, [selectedCategory]);
-
-  useEffect(() => {
-    fetchItems(page);
-  }, [page]);
+    const timer = setTimeout(() => {
+      fetchItems(page, searchTerm);
+    }, 400); // debounce API calls
+    return () => clearTimeout(timer);
+  }, [page, selectedCategory, searchTerm]);
 
   const handleCreate = async () => {
     if (!formData.name || !formData.category_id || formData.price <= 0) {
@@ -205,11 +204,8 @@ export default function MenuPage() {
     setShowEditModal(true);
   };
 
-  const filteredItems = items.filter(
-    (item) =>
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Client-side filtering is removed in favor of backend search queries
+  const filteredItems = items;
 
   if (routeLoading) {
     return <LoadingSkeleton count={4} />;
@@ -241,6 +237,7 @@ export default function MenuPage() {
               onChange={(e) => {
                 const val = e.target.value === 'all' ? 'all' : parseInt(e.target.value);
                 setSelectedCategory(val);
+                setPage(1);
               }}
               className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
             >
@@ -262,7 +259,10 @@ export default function MenuPage() {
               type="text"
               placeholder="Search by name or description..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPage(1);
+              }}
               className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:border-blue-500"
             />
           </div>
@@ -369,11 +369,10 @@ export default function MenuPage() {
                     <td className="px-6 py-4 text-center">
                       <button
                         onClick={() => handleToggleAvailability(item)}
-                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
-                          item.is_available
+                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${item.is_available
                             ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 hover:bg-green-200'
                             : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 hover:bg-red-200'
-                        }`}
+                          }`}
                       >
                         {item.is_available ? '✓ Available' : '✕ Hidden'}
                       </button>

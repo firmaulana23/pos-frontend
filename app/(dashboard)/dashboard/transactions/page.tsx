@@ -97,16 +97,42 @@ export default function TransactionsPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  const fetchTransactions = async (pageNum: number) => {
+  const fetchTransactions = async (pageNum: number, currentSearch?: string) => {
     try {
       setLoading(true);
       setError(null);
 
       const statusFilter = status === 'all' ? undefined : (status as 'pending' | 'paid');
       const limit = 10;
-      const offset = (pageNum - 1) * limit;
 
-      const response = await transactionsAPI.getTransactions(statusFilter, limit, offset);
+      let apiStartDate: string | undefined;
+      let apiEndDate: string | undefined;
+
+      if (dateRange === 'custom') {
+        apiStartDate = startDate || undefined;
+        apiEndDate = endDate || undefined;
+      } else if (dateRange !== 'all') {
+        const { start, end } = getDateRange(dateRange);
+        const formatYMD = (date: Date) => {
+          const y = date.getFullYear();
+          const m = String(date.getMonth() + 1).padStart(2, '0');
+          const d = String(date.getDate()).padStart(2, '0');
+          return `${y}-${m}-${d}`;
+        };
+        apiStartDate = formatYMD(start);
+        apiEndDate = formatYMD(end);
+      }
+
+      const activeSearch = currentSearch !== undefined ? currentSearch : searchTerm;
+
+      const response = await transactionsAPI.getTransactions(
+        statusFilter,
+        limit,
+        pageNum,
+        apiStartDate,
+        apiEndDate,
+        activeSearch || undefined
+      );
 
       setTransactions(response.data);
       setTotalPages(Math.ceil(response.total / limit));
@@ -118,13 +144,11 @@ export default function TransactionsPage() {
   };
 
   useEffect(() => {
-    fetchTransactions(1);
-    setPage(1);
-  }, [status]);
-
-  useEffect(() => {
-    fetchTransactions(page);
-  }, [page]);
+    const timer = setTimeout(() => {
+      fetchTransactions(page, searchTerm);
+    }, 400); // debounce API calls
+    return () => clearTimeout(timer);
+  }, [page, status, searchTerm, dateRange, startDate, endDate]);
 
   const handlePay = async (transactionId: number) => {
     try {
@@ -154,37 +178,8 @@ export default function TransactionsPage() {
     }
   };
 
-  const filteredTransactions = transactions.filter((t) => {
-    // Search filter
-    const matchesSearch = t.transaction_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (t.customer_name && t.customer_name.toLowerCase().includes(searchTerm.toLowerCase()));
-
-    if (!matchesSearch) return false;
-
-    // Date filter
-    const txDate = new Date(t.created_at);
-    txDate.setHours(0, 0, 0, 0);
-
-    if (dateRange === 'custom') {
-      if (!startDate && !endDate) return true;
-      
-      let isInRange = true;
-      if (startDate) {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        isInRange = txDate >= start;
-      }
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        isInRange = isInRange && txDate <= end;
-      }
-      return isInRange;
-    } else {
-      const { start, end } = getDateRange(dateRange);
-      return txDate >= start && txDate <= end;
-    }
-  });
+  // Client side filtering is removed since API handles it now.
+  const filteredTransactions = transactions;
 
   if (routeLoading) {
     return <LoadingSkeleton count={4} />;
@@ -215,11 +210,10 @@ export default function TransactionsPage() {
                   }
                   setPage(1);
                 }}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors capitalize ${
-                  dateRange === range
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 hover:bg-slate-300 dark:hover:bg-slate-600'
-                }`}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors capitalize ${dateRange === range
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 hover:bg-slate-300 dark:hover:bg-slate-600'
+                  }`}
               >
                 {range === 'custom' && '📅'} {range}
               </button>
@@ -257,7 +251,10 @@ export default function TransactionsPage() {
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Status</label>
             <select
               value={status}
-              onChange={(e) => setStatus(e.target.value as 'pending' | 'paid' | 'all')}
+              onChange={(e) => {
+                setStatus(e.target.value as 'pending' | 'paid' | 'all');
+                setPage(1);
+              }}
               className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
             >
               <option value="all">All Status</option>
@@ -273,7 +270,10 @@ export default function TransactionsPage() {
               type="text"
               placeholder="Search by transaction no or customer name..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPage(1);
+              }}
               className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:border-blue-500"
             />
           </div>

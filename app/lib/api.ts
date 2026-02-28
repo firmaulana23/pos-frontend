@@ -274,11 +274,14 @@ export const menuAPI = {
 
 // Transactions API endpoints
 export const transactionsAPI = {
-  getTransactions: async (status?: 'pending' | 'paid', limit: number = 10, offset: number = 0): Promise<TransactionsResponse> => {
+  getTransactions: async (status?: 'pending' | 'paid', limit: number = 10, page: number = 1, startDate?: string, endDate?: string, search?: string): Promise<TransactionsResponse> => {
     const params = new URLSearchParams();
     if (status) params.append('status', status);
     params.append('limit', limit.toString());
-    params.append('offset', offset.toString());
+    params.append('page', page.toString());
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    if (search) params.append('search', search);
 
     const endpoint = `/transactions${params.toString() ? `?${params.toString()}` : ''}`;
     return apiCall<TransactionsResponse>(endpoint);
@@ -332,11 +335,12 @@ export const transactionsAPI = {
 
 // Admin Menu API endpoints
 export const adminMenuAPI = {
-  getMenuItems: async (categoryId?: number, page: number = 1, limit: number = 10): Promise<MenuItemsResponse> => {
+  getMenuItems: async (categoryId?: number, page: number = 1, limit: number = 10, search?: string): Promise<MenuItemsResponse> => {
     const params = new URLSearchParams();
     if (categoryId) params.append('category_id', categoryId.toString());
     params.append('page', page.toString());
     params.append('limit', limit.toString());
+    if (search) params.append('search', search);
 
     const endpoint = `/menu/items${params.toString() ? `?${params.toString()}` : ''}`;
     return apiCall<MenuItemsResponse>(endpoint);
@@ -792,7 +796,12 @@ export const stockAPI = {
     });
   },
 
-  getDailySummaries: async (): Promise<DailySummary[]> => {
-    return apiCall<DailySummary[]>('/stock/summary');
+  getDailySummaries: async (startDate?: string, endDate?: string): Promise<DailySummary[]> => {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+
+    const endpoint = `/stock/summary?${params.toString()}`;
+    return apiCall<DailySummary[]>(endpoint);
   },
 };

@@ -23,6 +23,8 @@ export default function StockPage() {
     const [summaries, setSummaries] = useState<DailySummary[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [startDate, setStartDate] = useState<string>('');
+    const [endDate, setEndDate] = useState<string>('');
 
     // Modals for Master Data
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -50,7 +52,7 @@ export default function StockPage() {
                 const data = await stockAPI.getRawMaterials();
                 setMaterials(data || []);
             } else {
-                const data = await stockAPI.getDailySummaries();
+                const data = await stockAPI.getDailySummaries(startDate || undefined, endDate || undefined);
                 setSummaries(data || []);
             }
         } catch (err: any) {
@@ -62,7 +64,7 @@ export default function StockPage() {
 
     useEffect(() => {
         fetchData();
-    }, [activeTab]);
+    }, [activeTab, startDate, endDate]);
 
     // Master Data Methods
     const handleCreate = async () => {
@@ -155,10 +157,10 @@ export default function StockPage() {
                     {activeTab === 'current' && (
                         <>
                             <Button onClick={() => setShowReceiptModal(true)} className="bg-emerald-500 hover:bg-emerald-600 border-transparent text-white border">
-                                + Receipt
+                                + Masuk
                             </Button>
                             <Button onClick={() => setShowAdjustmentModal(true)} className="bg-amber-500 hover:bg-amber-600 border-transparent text-white border">
-                                + Adjustment
+                                + Internal
                             </Button>
                             <Button onClick={openOpnameModal} className="bg-indigo-500 hover:bg-indigo-600 border-transparent text-white border">
                                 ✏️ Opname
@@ -185,6 +187,35 @@ export default function StockPage() {
                     Opname History
                 </button>
             </div>
+
+            {activeTab === 'history' && (
+                <div className="flex justify-end pr-2 pl-2">
+                    <div className="flex gap-4">
+                        <Input
+                            type="date"
+                            label="Start Date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                        />
+                        <Input
+                            type="date"
+                            label="End Date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                        />
+                        {(startDate || endDate) && (
+                            <div className="flex items-end mb-1">
+                                <button
+                                    onClick={() => { setStartDate(''); setEndDate(''); }}
+                                    className="text-xs text-blue-500 hover:text-blue-600"
+                                >
+                                    Clear filters
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {error && (
                 <div className="card border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900">
@@ -243,9 +274,10 @@ export default function StockPage() {
                                 <tr>
                                     <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900 dark:text-white">Date</th>
                                     <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900 dark:text-white">Item</th>
-                                    <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900 dark:text-white">Start</th>
+                                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900 dark:text-white">Start</th>
                                     <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900 dark:text-white">In</th>
-                                    <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900 dark:text-white">Usage</th>
+                                    <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900 dark:text-white">Actual Usage</th>
+                                    <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900 dark:text-white">Theoretical</th>
                                     <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900 dark:text-white">Adj</th>
                                     <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900 dark:text-white">End</th>
                                     <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900 dark:text-white">Variance</th>
@@ -263,7 +295,8 @@ export default function StockPage() {
                                             <td className="px-6 py-4 font-semibold text-slate-900 dark:text-slate-50">{summary.raw_material?.name || `ID ${summary.raw_material_id}`}</td>
                                             <td className="px-6 py-4 text-right text-slate-600 dark:text-slate-300">{summary.beginning_stock}</td>
                                             <td className="px-6 py-4 text-right text-emerald-600 dark:text-emerald-400 font-medium">{summary.receipts_in}</td>
-                                            <td className="px-6 py-4 text-right text-slate-600 dark:text-slate-300">-{summary.daily_usage}</td>
+                                            <td className="px-6 py-4 text-right text-slate-900 dark:text-white font-medium">{summary.daily_usage}</td>
+                                            <td className="px-6 py-4 text-right text-slate-600 dark:text-slate-300">{summary.theoretical_usage}</td>
                                             <td className="px-6 py-4 text-right text-amber-600 dark:text-amber-400">{summary.adjustments > 0 ? `+${summary.adjustments}` : summary.adjustments}</td>
                                             <td className="px-6 py-4 text-right font-bold text-slate-900 dark:text-slate-50">{summary.ending_stock}</td>
                                             <td className="px-6 py-4 text-right">

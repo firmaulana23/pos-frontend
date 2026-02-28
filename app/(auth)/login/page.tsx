@@ -119,17 +119,6 @@ export default function LoginPage() {
                 {loading ? 'Masuk...' : 'Masuk'}
               </Button>
             </form>
-
-            {/* Demo credentials hint */}
-            <div className="mt-8 p-4 bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 rounded-lg">
-              <p className="text-xs text-blue-900 dark:text-blue-200 font-medium mb-2">Demo Credentials:</p>
-              <p className="text-xs text-blue-800 dark:text-blue-300">
-                Username: <span className="font-mono font-semibold">admin</span>
-              </p>
-              <p className="text-xs text-blue-800 dark:text-blue-300">
-                Password: <span className="font-mono font-semibold">admin123</span>
-              </p>
-            </div>
           </div>
 
           {/* Footer */}
