@@ -25,6 +25,9 @@ export default function DashboardPage() {
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'all' | 'custom'>('all');
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
+  // Pending states — buffer user input before applying
+  const [pendingStartDate, setPendingStartDate] = useState<string>('');
+  const [pendingEndDate, setPendingEndDate] = useState<string>('');
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -199,8 +202,8 @@ export default function DashboardPage() {
                   setCustomEndDate('');
                 }}
                 className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${dateRange === range
-                    ? 'bg-blue-500 text-white shadow-md'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-50 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  ? 'bg-blue-500 text-white shadow-md'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-50 hover:bg-slate-200 dark:hover:bg-slate-700'
                   }`}
               >
                 {range === 'all' ? 'All Time' : range === 'today' ? 'Today' : range === 'week' ? 'Last 7 Days' : 'This Month'}
@@ -216,13 +219,8 @@ export default function DashboardPage() {
                 <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Start Date</label>
                 <input
                   type="date"
-                  value={customStartDate}
-                  onChange={(e) => {
-                    setCustomStartDate(e.target.value);
-                    if (dateRange !== 'custom') {
-                      setDateRange('custom');
-                    }
-                  }}
+                  value={pendingStartDate}
+                  onChange={(e) => setPendingStartDate(e.target.value)}
                   className="w-full px-3 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 transition-colors duration-200"
                 />
               </div>
@@ -230,18 +228,28 @@ export default function DashboardPage() {
                 <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">End Date</label>
                 <input
                   type="date"
-                  value={customEndDate}
-                  onChange={(e) => {
-                    setCustomEndDate(e.target.value);
-                    if (dateRange !== 'custom') {
-                      setDateRange('custom');
-                    }
-                  }}
+                  value={pendingEndDate}
+                  onChange={(e) => setPendingEndDate(e.target.value)}
                   className="w-full px-3 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 transition-colors duration-200"
                 />
               </div>
               <button
                 onClick={() => {
+                  if (pendingStartDate && pendingEndDate) {
+                    setCustomStartDate(pendingStartDate);
+                    setCustomEndDate(pendingEndDate);
+                    setDateRange('custom');
+                  }
+                }}
+                disabled={!pendingStartDate || !pendingEndDate}
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors duration-200"
+              >
+                Apply
+              </button>
+              <button
+                onClick={() => {
+                  setPendingStartDate('');
+                  setPendingEndDate('');
                   setCustomStartDate('');
                   setCustomEndDate('');
                   setDateRange('all');
@@ -256,7 +264,7 @@ export default function DashboardPage() {
             {dateRange === 'custom' && customStartDate && customEndDate && (
               <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900 rounded-lg">
                 <p className="text-xs text-blue-800 dark:text-blue-200">
-                  📅 Selected: <strong>{customStartDate}</strong> to <strong>{customEndDate}</strong>
+                  📅 Applied: <strong>{customStartDate}</strong> to <strong>{customEndDate}</strong>
                 </p>
               </div>
             )}

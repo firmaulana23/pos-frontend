@@ -281,7 +281,7 @@ export const transactionsAPI = {
     params.append('page', page.toString());
     if (startDate) params.append('start_date', startDate);
     if (endDate) params.append('end_date', endDate);
-    if (search) params.append('search', search);
+    if (search) params.append('customer_name', search);
 
     const endpoint = `/transactions${params.toString() ? `?${params.toString()}` : ''}`;
     return apiCall<TransactionsResponse>(endpoint);

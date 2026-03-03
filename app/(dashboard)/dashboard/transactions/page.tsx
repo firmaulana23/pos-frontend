@@ -93,6 +93,7 @@ export default function TransactionsPage() {
   const [showDetails, setShowDetails] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [payingId, setPayingId] = useState<number | null>(null);
+  const [payModal, setPayModal] = useState<{ transactionId: number; method: string } | null>(null);
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'all' | 'custom'>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -150,10 +151,11 @@ export default function TransactionsPage() {
     return () => clearTimeout(timer);
   }, [page, status, searchTerm, dateRange, startDate, endDate]);
 
-  const handlePay = async (transactionId: number) => {
+  const handlePay = async (transactionId: number, paymentMethod: string) => {
     try {
       setPayingId(transactionId);
-      await transactionsAPI.payTransaction(transactionId, 'cash');
+      setPayModal(null);
+      await transactionsAPI.payTransaction(transactionId, paymentMethod);
       // Refresh the list
       await fetchTransactions(page);
     } catch (err: any) {
@@ -377,7 +379,7 @@ export default function TransactionsPage() {
 
                       {transaction.status === 'pending' && (
                         <button
-                          onClick={() => handlePay(transaction.id)}
+                          onClick={() => setPayModal({ transactionId: transaction.id, method: 'cash' })}
                           disabled={payingId === transaction.id}
                           className="inline-flex items-center px-3 py-1 text-xs font-medium text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900 rounded transition-colors disabled:opacity-50"
                         >
@@ -526,6 +528,57 @@ export default function TransactionsPage() {
               Close
             </button>
           </Card>
+        </div>
+      )}
+
+
+      {/* Payment Method Modal */}
+      {payModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Select Payment Method</h3>
+              <button onClick={() => setPayModal(null)} className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 text-xl leading-none">&times;</button>
+            </div>
+
+            <div className="space-y-2 mb-6">
+              {[
+                { code: 'cash', label: 'Cash', icon: '💵' },
+                { code: 'qris', label: 'QRIS', icon: '📱' },
+                { code: 'card', label: 'Card', icon: '💳' },
+                { code: 'digital_wallet', label: 'Digital Wallet', icon: '👜' },
+              ].map(({ code, label, icon }) => (
+                <button
+                  key={code}
+                  onClick={() => setPayModal({ ...payModal, method: code })}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border-2 font-medium transition-all ${
+                    payModal.method === code
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-200'
+                      : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+                  }`}
+                >
+                  <span className="text-xl">{icon}</span>
+                  <span>{label}</span>
+                  {payModal.method === code && <span className="ml-auto text-blue-500">✓</span>}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPayModal(null)}
+                className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handlePay(payModal.transactionId, payModal.method)}
+                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-green-500 hover:bg-green-600 rounded-lg transition-colors"
+              >
+                Confirm Payment
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
