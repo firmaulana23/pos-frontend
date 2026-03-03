@@ -61,7 +61,7 @@ export default function POSPage() {
         try {
             setLoading(true);
             const [cats, addonsRes] = await Promise.all([
-                menuAPI.getCategories(),
+                menuAPI.getCategories() as Promise<Category[]>,
                 menuAPI.getAddOns() as Promise<any>
             ]);
             setCategories(cats);
