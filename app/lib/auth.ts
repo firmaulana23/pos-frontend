@@ -91,15 +91,22 @@ export const useAuth = () => {
 };
 
 // Protected route hook
-export const useProtectedRoute = () => {
+export const useProtectedRoute = (requiredRole?: string | string[]) => {
   const router = useRouter();
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
 
   useEffect(() => {
-    if (!loading && !isAuthenticated) {
-      router.push('/login');
+    if (!loading) {
+      if (!isAuthenticated) {
+        router.push('/login');
+      } else if (requiredRole && user) {
+        const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
+        if (!roles.includes(user.role)) {
+          router.push('/dashboard');
+        }
+      }
     }
-  }, [isAuthenticated, loading, router]);
+  }, [isAuthenticated, loading, router, user, requiredRole]);
 
   return { isLoading: loading };
 };
