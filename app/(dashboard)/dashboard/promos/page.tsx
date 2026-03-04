@@ -86,8 +86,8 @@ export default function PromosPage() {
                 usage_limit: formData.usage_limit > 0 ? formData.usage_limit : undefined,
                 stackable: formData.stackable,
                 is_active: formData.is_active,
-                start_at: `${formData.start_at}T00:00:00Z`,
-                end_at: `${formData.end_at}T23:59:59Z`,
+                start_date: `${formData.start_at}T00:00:00Z`,
+                end_date: `${formData.end_at}T23:59:59Z`,
             };
 
             await promosAPI.createPromo(payload);
@@ -118,8 +118,8 @@ export default function PromosPage() {
                 usage_limit: formData.usage_limit > 0 ? formData.usage_limit : undefined,
                 stackable: formData.stackable,
                 is_active: formData.is_active,
-                start_at: `${formData.start_at}T00:00:00Z`,
-                end_at: `${formData.end_at}T23:59:59Z`,
+                start_date: `${formData.start_at}T00:00:00Z`,
+                end_date: `${formData.end_at}T23:59:59Z`,
             };
 
             await promosAPI.updatePromo(selectedPromo.id, payload);

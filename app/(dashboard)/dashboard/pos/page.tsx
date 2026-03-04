@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { menuAPI, transactionsAPI, Category, MenuItem } from '@/app/lib/api';
+import { useEffect, useState, useCallback } from 'react';
+import { menuAPI, transactionsAPI, membersAPI, promosAPI, Category, MenuItem, Member, Promo } from '@/app/lib/api';
 import { Card } from '@/app/components/ui';
 
 interface AddOn {
@@ -12,7 +12,7 @@ interface AddOn {
 }
 
 interface CartItem {
-    id: string; // unique string id for frontend handling of duplicate menu items with different addons
+    id: string;
     menu_item_id: number;
     name: string;
     base_price: number;
@@ -33,21 +33,35 @@ export default function POSPage() {
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [addOns, setAddOns] = useState<AddOn[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<number | 'all'>('all');
+    const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     // Cart State
     const [cart, setCart] = useState<CartItem[]>([]);
+
     // Add-ons Modal State
     const [showAddonModal, setShowAddonModal] = useState(false);
     const [selectedMenuItem, setSelectedMenuItem] = useState<MenuItem | null>(null);
     const [availableAddonsForItem, setAvailableAddonsForItem] = useState<AddOn[]>([]);
-    const [selectedAddons, setSelectedAddons] = useState<Record<number, number>>({}); // addon_id -> quantity
+    const [selectedAddons, setSelectedAddons] = useState<Record<number, number>>({});
 
     // Checkout State
     const [customerName, setCustomerName] = useState('');
     const [isCheckingOut, setIsCheckingOut] = useState(false);
     const [checkoutSuccess, setCheckoutSuccess] = useState(false);
+
+    // Member State
+    const [memberCardInput, setMemberCardInput] = useState('');
+    const [memberInfo, setMemberInfo] = useState<Member | null>(null);
+    const [memberLoading, setMemberLoading] = useState(false);
+    const [memberError, setMemberError] = useState<string | null>(null);
+
+    // Promo State
+    const [promoCodeInput, setPromoCodeInput] = useState('');
+    const [promoInfo, setPromoInfo] = useState<Promo | null>(null);
+    const [promoLoading, setPromoLoading] = useState(false);
+    const [promoError, setPromoError] = useState<string | null>(null);
 
     useEffect(() => {
         fetchInitialData();
@@ -77,9 +91,7 @@ export default function POSPage() {
         try {
             setLoading(true);
             const catId = selectedCategory === 'all' ? undefined : (selectedCategory as number);
-            // Ensure we hit the public endpoint with limit params from the api.ts signature
             const response: any = await menuAPI.getMenuItems(catId);
-            // Public menu returns `{ data: [] }` wrapper by convention usually
             setMenuItems(response.data || response || []);
         } catch (err: any) {
             setError('Failed to load menu items');
@@ -88,8 +100,59 @@ export default function POSPage() {
         }
     };
 
+    // Filter menu items by search query (client-side)
+    const filteredMenuItems = searchQuery.trim()
+        ? menuItems.filter(item =>
+            item.name.toLowerCase().includes(searchQuery.toLowerCase()))
+        : menuItems;
+
+    // --- Member lookup ---
+    const handleLookupMember = async () => {
+        if (!memberCardInput.trim()) return;
+        setMemberLoading(true);
+        setMemberError(null);
+        setMemberInfo(null);
+        try {
+            const res: any = await membersAPI.getMemberByCard(memberCardInput.trim());
+            const member = res.data || res;
+            setMemberInfo(member);
+        } catch (err: any) {
+            setMemberError(err.message || 'Member not found');
+        } finally {
+            setMemberLoading(false);
+        }
+    };
+
+    const handleClearMember = () => {
+        setMemberCardInput('');
+        setMemberInfo(null);
+        setMemberError(null);
+    };
+
+    // --- Promo lookup ---
+    const handleApplyPromo = async () => {
+        if (!promoCodeInput.trim()) return;
+        setPromoLoading(true);
+        setPromoError(null);
+        setPromoInfo(null);
+        try {
+            const promo = await promosAPI.validatePromo(promoCodeInput.trim());
+            setPromoInfo(promo);
+        } catch (err: any) {
+            setPromoError(err.message || 'Invalid or expired promo code');
+        } finally {
+            setPromoLoading(false);
+        }
+    };
+
+    const handleClearPromo = () => {
+        setPromoCodeInput('');
+        setPromoInfo(null);
+        setPromoError(null);
+    };
+
+    // --- Menu item click ---
     const handleMenuClick = (item: MenuItem) => {
-        // Check if this item has applicable add-ons (either global or specific to this item)
         const applicableAddons = addOns.filter(
             (addon) => addon.menu_item_id === null || addon.menu_item_id === item.id
         );
@@ -100,7 +163,6 @@ export default function POSPage() {
             setSelectedAddons({});
             setShowAddonModal(true);
         } else {
-            // Direct add to cart
             addToCart(item, []);
         }
     };
@@ -109,9 +171,9 @@ export default function POSPage() {
         setSelectedAddons((prev) => {
             const newSelections = { ...prev };
             if (newSelections[addonId]) {
-                delete newSelections[addonId]; // toggle off
+                delete newSelections[addonId];
             } else {
-                newSelections[addonId] = 1; // primary toggle on with quantity 1
+                newSelections[addonId] = 1;
             }
             return newSelections;
         });
@@ -137,7 +199,6 @@ export default function POSPage() {
     };
 
     const addToCart = (item: MenuItem, addons: { add_on_id: number; name: string; price: number; quantity: number }[]) => {
-        // Generate an ID based on item ID and specifically selected add-ons so that we can stack matching exact configs
         const addonKey = addons.map(a => `${a.add_on_id}-${a.quantity}`).sort().join('_');
         const uniqueCartId = `${item.id}_${addonKey}`;
 
@@ -181,6 +242,24 @@ export default function POSPage() {
         return sum + ((item.base_price + itemAddonsTotal) * item.quantity);
     }, 0);
 
+    // Compute member discount
+    const memberDiscount = memberInfo
+        ? Math.floor(cartSubtotal * (memberInfo.discount / 100))
+        : 0;
+
+    // Compute promo discount
+    const computePromoDiscount = () => {
+        if (!promoInfo) return 0;
+        if (promoInfo.discount_type === 'percentage') {
+            const raw = Math.floor(cartSubtotal * (promoInfo.discount_value / 100));
+            return promoInfo.max_discount > 0 ? Math.min(raw, promoInfo.max_discount) : raw;
+        }
+        return promoInfo.discount_value;
+    };
+    const promoDiscount = computePromoDiscount();
+
+    const cartTotal = Math.max(0, cartSubtotal - memberDiscount - promoDiscount);
+
     const handleCheckout = async () => {
         if (cart.length === 0) return;
 
@@ -188,8 +267,7 @@ export default function POSPage() {
             setIsCheckingOut(true);
             setError(null);
 
-            // Map our CartItem[] interface to the exact endpoint payload
-            const orderPayload = {
+            const orderPayload: any = {
                 customer_name: customerName.trim() || undefined,
                 items: cart.map(c => ({
                     menu_item_id: c.menu_item_id,
@@ -201,11 +279,19 @@ export default function POSPage() {
                 }))
             };
 
+            if (memberInfo) orderPayload.member_id = memberInfo.id;
+            if (promoInfo) orderPayload.promo_id = promoInfo.id;
+
             await transactionsAPI.createTransaction(orderPayload);
 
-            // Clean up UI on success
             setCart([]);
             setCustomerName('');
+            setMemberCardInput('');
+            setMemberInfo(null);
+            setMemberError(null);
+            setPromoCodeInput('');
+            setPromoInfo(null);
+            setPromoError(null);
             setCheckoutSuccess(true);
             setTimeout(() => setCheckoutSuccess(false), 3000);
 
@@ -221,12 +307,34 @@ export default function POSPage() {
 
             {/* Left Area: Menu Browser */}
             <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                {/* Category Filters */}
-                <div className="p-4 border-b border-slate-200 dark:border-slate-700 overflow-x-auto whitespace-nowrap scrollbar-hide">
-                    <div className="flex gap-2">
+
+                {/* Search + Category Filters */}
+                <div className="p-4 border-b border-slate-200 dark:border-slate-700 space-y-3">
+                    {/* Search */}
+                    <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
+                        <input
+                            type="text"
+                            placeholder="Search menu..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-50 placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm"
+                        />
+                        {searchQuery && (
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                            >
+                                ✕
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Category pills */}
+                    <div className="flex gap-2 overflow-x-auto scrollbar-hide">
                         <button
                             onClick={() => setSelectedCategory('all')}
-                            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${selectedCategory === 'all'
+                            className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${selectedCategory === 'all'
                                 ? 'bg-blue-600 text-white'
                                 : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
                                 }`}
@@ -237,7 +345,7 @@ export default function POSPage() {
                             <button
                                 key={cat.id}
                                 onClick={() => setSelectedCategory(cat.id)}
-                                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${selectedCategory === cat.id
+                                className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${selectedCategory === cat.id
                                     ? 'bg-blue-600 text-white'
                                     : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
                                     }`}
@@ -262,14 +370,14 @@ export default function POSPage() {
                                 <div key={i} className="h-40 bg-slate-100 dark:bg-slate-700 rounded-xl animate-pulse" />
                             ))}
                         </div>
-                    ) : menuItems.length === 0 ? (
+                    ) : filteredMenuItems.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full text-slate-500">
-                            <span className="text-4xl mb-2">🍽️</span>
-                            <p>No items found in this category</p>
+                            <span className="text-4xl mb-2">🔍</span>
+                            <p>{searchQuery ? `No items match "${searchQuery}"` : 'No items found in this category'}</p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-4">
-                            {menuItems.map((item) => (
+                            {filteredMenuItems.map((item) => (
                                 <button
                                     key={item.id}
                                     onClick={() => handleMenuClick(item)}
@@ -307,12 +415,12 @@ export default function POSPage() {
             </div>
 
             {/* Right Area: Cart Panel */}
-            <div className="w-96 flex flex-col bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+            <div className="w-96 flex flex-col bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
                 <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
                     <h2 className="text-xl font-bold text-slate-900 dark:text-white">Current Order</h2>
                     {checkoutSuccess && (
                         <span className="text-sm font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg">
-                            ✓ Payment Success
+                            ✓ Order Placed
                         </span>
                     )}
                 </div>
@@ -355,7 +463,7 @@ export default function POSPage() {
                                     </div>
                                     <span className="font-bold text-slate-900 dark:text-white text-sm">
                                         {formatCurrency(
-                                            (cartItem.base_price + cartItem.add_ons.reduce((s, a) => s + (a.price), 0)) * cartItem.quantity
+                                            (cartItem.base_price + cartItem.add_ons.reduce((s, a) => s + a.price, 0)) * cartItem.quantity
                                         )}
                                     </span>
                                 </div>
@@ -366,25 +474,115 @@ export default function POSPage() {
 
                 {/* Checkout Area */}
                 <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 rounded-b-xl space-y-3">
+
+                    {/* Customer Name */}
+                    <input
+                        type="text"
+                        placeholder="Customer Name (Optional)"
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500 text-sm"
+                    />
+
+                    {/* Member Card */}
                     <div>
-                        <input
-                            type="text"
-                            placeholder="Customer Name (Optional)"
-                            value={customerName}
-                            onChange={(e) => setCustomerName(e.target.value)}
-                            className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500 text-sm"
-                        />
+                        {memberInfo ? (
+                            <div className="flex items-center justify-between bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-lg px-3 py-2">
+                                <div>
+                                    <p className="text-xs font-semibold text-green-800 dark:text-green-200">👤 {memberInfo.full_name}</p>
+                                    <p className="text-xs text-green-700 dark:text-green-300">Member discount: {memberInfo.discount}%</p>
+                                </div>
+                                <button onClick={handleClearMember} className="text-green-600 dark:text-green-400 hover:text-red-500 text-lg leading-none">✕</button>
+                            </div>
+                        ) : (
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="Member card number"
+                                    value={memberCardInput}
+                                    onChange={(e) => setMemberCardInput(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleLookupMember()}
+                                    className="flex-1 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500 text-sm"
+                                />
+                                <button
+                                    onClick={handleLookupMember}
+                                    disabled={memberLoading || !memberCardInput.trim()}
+                                    className="px-3 py-2 bg-slate-700 hover:bg-slate-800 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
+                                >
+                                    {memberLoading ? '...' : 'Apply'}
+                                </button>
+                            </div>
+                        )}
+                        {memberError && <p className="text-xs text-red-500 mt-1">{memberError}</p>}
                     </div>
-                    <div className="flex justify-between items-end border-t border-slate-200 dark:border-slate-700 pt-3">
-                        <span className="font-medium text-slate-900 dark:text-white">Total</span>
-                        <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                            {formatCurrency(cartSubtotal)}
-                        </span>
+
+                    {/* Promo Code */}
+                    <div>
+                        {promoInfo ? (
+                            <div className="flex items-center justify-between bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg px-3 py-2">
+                                <div>
+                                    <p className="text-xs font-semibold text-purple-800 dark:text-purple-200">🏷️ {promoInfo.code} – {promoInfo.name}</p>
+                                    <p className="text-xs text-purple-700 dark:text-purple-300">
+                                        {promoInfo.discount_type === 'percentage'
+                                            ? `${promoInfo.discount_value}% off${promoInfo.max_discount > 0 ? ` (max ${formatCurrency(promoInfo.max_discount)})` : ''}`
+                                            : `${formatCurrency(promoInfo.discount_value)} off`
+                                        }
+                                    </p>
+                                </div>
+                                <button onClick={handleClearPromo} className="text-purple-600 dark:text-purple-400 hover:text-red-500 text-lg leading-none">✕</button>
+                            </div>
+                        ) : (
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="Promo code"
+                                    value={promoCodeInput}
+                                    onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleApplyPromo()}
+                                    className="flex-1 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-purple-500 text-sm"
+                                />
+                                <button
+                                    onClick={handleApplyPromo}
+                                    disabled={promoLoading || !promoCodeInput.trim()}
+                                    className="px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
+                                >
+                                    {promoLoading ? '...' : 'Apply'}
+                                </button>
+                            </div>
+                        )}
+                        {promoError && <p className="text-xs text-red-500 mt-1">{promoError}</p>}
                     </div>
+
+                    {/* Price Breakdown */}
+                    <div className="border-t border-slate-200 dark:border-slate-700 pt-3 space-y-1">
+                        <div className="flex justify-between text-sm text-slate-600 dark:text-slate-400">
+                            <span>Subtotal</span>
+                            <span>{formatCurrency(cartSubtotal)}</span>
+                        </div>
+                        {memberDiscount > 0 && (
+                            <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
+                                <span>Member Discount ({memberInfo!.discount}%)</span>
+                                <span>-{formatCurrency(memberDiscount)}</span>
+                            </div>
+                        )}
+                        {promoDiscount > 0 && (
+                            <div className="flex justify-between text-sm text-purple-600 dark:text-purple-400">
+                                <span>Promo ({promoInfo!.code})</span>
+                                <span>-{formatCurrency(promoDiscount)}</span>
+                            </div>
+                        )}
+                        <div className="flex justify-between items-end pt-1 border-t border-slate-200 dark:border-slate-700">
+                            <span className="font-semibold text-slate-900 dark:text-white">Total</span>
+                            <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                                {formatCurrency(cartTotal)}
+                            </span>
+                        </div>
+                    </div>
+
                     <button
                         onClick={handleCheckout}
                         disabled={cart.length === 0 || isCheckingOut}
-                        className="w-full mt-2 py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-lg font-bold rounded-xl transition-colors shadow-sm flex justify-center items-center gap-2"
+                        className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-lg font-bold rounded-xl transition-colors shadow-sm flex justify-center items-center gap-2"
                     >
                         {isCheckingOut ? 'Processing...' : 'Charge Order'}
                     </button>
@@ -436,7 +634,7 @@ export default function POSPage() {
                             onClick={confirmAddonSelection}
                             className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors"
                         >
-                            Add to Order - {formatCurrency(
+                            Add to Order – {formatCurrency(
                                 selectedMenuItem.price + Object.keys(selectedAddons).reduce((sum, id) => {
                                     return sum + (addOns.find(a => a.id === parseInt(id))?.price || 0);
                                 }, 0)

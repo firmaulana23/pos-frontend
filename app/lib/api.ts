@@ -648,6 +648,14 @@ export const membersAPI = {
     return apiCall<{ data: Member[] }>('/members').then(res => res.data);
   },
 
+  getMemberByCard: async (cardNumber: string): Promise<{ data: Member }> => {
+    return apiCall<{ data: Member }>(`/members/card/${cardNumber}`);
+  },
+
+  validateMember: async (cardNumber: string): Promise<{ success: boolean; data: Member }> => {
+    return apiCall<{ success: boolean; data: Member }>(`/members/validate?card_number=${encodeURIComponent(cardNumber)}`);
+  },
+
   createMember: async (data: {
     full_name: string;
     email: string;
@@ -700,8 +708,8 @@ export const promosAPI = {
     discount_value: number;
     min_order_amount?: number;
     max_discount?: number;
-    start_at: string;
-    end_at: string;
+    start_date: string;
+    end_date: string;
     usage_limit?: number;
     stackable?: boolean;
     is_active?: boolean;
@@ -718,8 +726,8 @@ export const promosAPI = {
     description?: string;
     type?: 'percentage' | 'fixed';
     value?: number;
-    start_at?: string;
-    end_at?: string;
+    start_date?: string;
+    end_date?: string;
     usage_limit?: number;
     stackable?: boolean;
     is_active?: boolean;
