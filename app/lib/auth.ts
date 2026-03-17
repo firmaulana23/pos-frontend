@@ -70,15 +70,44 @@ export const useAuth = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    const storedUser = authStorage.getUser();
     const token = authStorage.getToken();
 
-    if (storedUser && token) {
-      setUser(storedUser);
-      setIsAuthenticated(true);
+    if (!token) {
+      setLoading(false);
+      return;
     }
 
-    setLoading(false);
+    // Validate token against server
+    const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+    fetch(`${BASE_URL}/profile`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          const responseData = await res.json();
+          // Unwrap { success, data } wrapper from API response
+          const userData = responseData.data || responseData;
+          setUser(userData);
+          setIsAuthenticated(true);
+          authStorage.setUser(userData);
+        } else {
+          // Token invalid/expired — clear everything
+          authStorage.clear();
+          setUser(null);
+          setIsAuthenticated(false);
+        }
+      })
+      .catch(() => {
+        // Network error — fallback to stored user
+        const storedUser = authStorage.getUser();
+        if (storedUser) {
+          setUser(storedUser);
+          setIsAuthenticated(true);
+        }
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
   const logout = () => {

@@ -135,8 +135,8 @@ export default function TransactionsPage() {
         activeSearch || undefined
       );
 
-      setTransactions(response.data);
-      setTotalPages(Math.ceil(response.total / limit));
+      setTransactions(response.data || []);
+      setTotalPages(Math.ceil((response.total || 0) / limit) || 1);
     } catch (err: any) {
       setError(err.message || 'Failed to load transactions');
     } finally {
@@ -551,11 +551,10 @@ export default function TransactionsPage() {
                 <button
                   key={code}
                   onClick={() => setPayModal({ ...payModal, method: code })}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border-2 font-medium transition-all ${
-                    payModal.method === code
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border-2 font-medium transition-all ${payModal.method === code
                       ? 'border-blue-500 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-200'
                       : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
-                  }`}
+                    }`}
                 >
                   <span className="text-xl">{icon}</span>
                   <span>{label}</span>

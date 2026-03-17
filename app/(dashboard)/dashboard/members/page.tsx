@@ -36,7 +36,7 @@ export default function MembersPage() {
       setLoading(true);
       setError(null);
       const response = await membersAPI.getMembers();
-      setMembers(response);
+      setMembers(response || []);
     } catch (err: any) {
       setError(err.message || 'Failed to load members');
     } finally {

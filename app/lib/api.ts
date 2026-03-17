@@ -19,7 +19,7 @@ export interface DashboardStats {
   total_sales: number;
   total_cogs: number;
   gross_profit: number;
-  gross_margin_percent: number;
+  gross_margin: number;
   total_operational_expenses: number;
   total_raw_material_expenses: number;
   net_profit: number;
@@ -99,6 +99,7 @@ export interface TransactionsResponse {
   total: number;
   page: number;
   limit: number;
+  total_pages: number;
 }
 
 // Menu Types
@@ -142,6 +143,7 @@ export interface MenuItemsResponse {
   total?: number;
   page?: number;
   limit?: number;
+  total_pages?: number;
 }
 
 export interface ApiError {
@@ -150,11 +152,30 @@ export interface ApiError {
   details?: any;
 }
 
-// Helper to make API calls
-async function apiCall<T>(
+// Standard API response wrapper types
+interface ApiResponse<T> {
+  success: boolean;
+  message: string;
+  data: T;
+}
+
+interface PaginatedApiResponse<T> {
+  success: boolean;
+  message: string;
+  data: T[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    total_pages: number;
+  };
+}
+
+// Helper for raw fetch with auth and error handling
+async function fetchAPI(
   endpoint: string,
   options: RequestInit = {}
-): Promise<T> {
+): Promise<any> {
   const url = `${BASE_URL}${endpoint}`;
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
 
@@ -185,7 +206,7 @@ async function apiCall<T>(
     // Handle empty responses
     const contentType = response.headers.get('content-type');
     if (!contentType?.includes('application/json')) {
-      return {} as T;
+      return {};
     }
 
     return response.json();
@@ -199,6 +220,34 @@ async function apiCall<T>(
     }
     throw error;
   }
+}
+
+// Auto-unwraps { success, data } wrapper — returns data directly as T
+async function apiCall<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const res = await fetchAPI(endpoint, options);
+  // If the response has a standard wrapper shape, unwrap it
+  if (res && typeof res === 'object' && 'success' in res && 'data' in res) {
+    return res.data as T;
+  }
+  return res as T;
+}
+
+// For paginated endpoints — returns { data: T[], meta }
+async function apiCallPaginated<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<{ data: T[]; total: number; page: number; limit: number; total_pages: number }> {
+  const res = await fetchAPI(endpoint, options);
+  return {
+    data: res.data || [],
+    total: res.meta?.total ?? 0,
+    page: res.meta?.page ?? 1,
+    limit: res.meta?.limit ?? 10,
+    total_pages: res.meta?.total_pages ?? 1,
+  };
 }
 
 // Auth API endpoints
@@ -284,7 +333,7 @@ export const transactionsAPI = {
     if (search) params.append('customer_name', search);
 
     const endpoint = `/transactions${params.toString() ? `?${params.toString()}` : ''}`;
-    return apiCall<TransactionsResponse>(endpoint);
+    return apiCallPaginated<Transaction>(endpoint);
   },
 
   getTransaction: async (id: number): Promise<Transaction> => {
@@ -301,8 +350,10 @@ export const transactionsAPI = {
     payment_method?: string;
     tax?: number;
     discount_percentage?: number;
-  }): Promise<{ success: boolean; data: Transaction }> => {
-    return apiCall<{ success: boolean; data: Transaction }>('/transactions', {
+    member_id?: number;
+    promo_id?: number;
+  }): Promise<Transaction> => {
+    return apiCall<Transaction>('/transactions', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -343,7 +394,7 @@ export const adminMenuAPI = {
     if (search) params.append('search', search);
 
     const endpoint = `/menu/items${params.toString() ? `?${params.toString()}` : ''}`;
-    return apiCall<MenuItemsResponse>(endpoint);
+    return apiCallPaginated<MenuItem>(endpoint);
   },
 
   getMenuItem: async (id: number): Promise<MenuItem> => {
@@ -426,10 +477,10 @@ export interface Expense {
   user_id: number;
   created_at: string;
   updated_at: string;
-  user: {
+  user?: {
     id: number;
     username: string;
-    role: string;
+    full_name: string;
   };
 }
 
@@ -438,6 +489,7 @@ export interface ExpensesResponse {
   total: number;
   page: number;
   limit: number;
+  total_pages: number;
 }
 
 // Expenses API endpoints
@@ -451,7 +503,7 @@ export const expensesAPI = {
     if (endDate) params.append('end_date', endDate);
 
     const endpoint = `/expenses?${params.toString()}`;
-    return apiCall<ExpensesResponse>(endpoint);
+    return apiCallPaginated<Expense>(endpoint);
   },
 
   createExpense: async (data: {
@@ -645,15 +697,15 @@ export const usersAPI = {
 // Members API endpoints
 export const membersAPI = {
   getMembers: async (): Promise<Member[]> => {
-    return apiCall<{ data: Member[] }>('/members').then(res => res.data);
+    return apiCall<Member[]>('/members');
   },
 
-  getMemberByCard: async (cardNumber: string): Promise<{ data: Member }> => {
-    return apiCall<{ data: Member }>(`/members/card/${cardNumber}`);
+  getMemberByCard: async (cardNumber: string): Promise<Member> => {
+    return apiCall<Member>(`/members/card/${cardNumber}`);
   },
 
-  validateMember: async (cardNumber: string): Promise<{ success: boolean; data: Member }> => {
-    return apiCall<{ success: boolean; data: Member }>(`/members/validate?card_number=${encodeURIComponent(cardNumber)}`);
+  validateMember: async (cardNumber: string): Promise<Member> => {
+    return apiCall<Member>(`/members/validate?card_number=${encodeURIComponent(cardNumber)}`);
   },
 
   createMember: async (data: {
@@ -693,11 +745,11 @@ export const membersAPI = {
 // Promos API endpoints
 export const promosAPI = {
   getPromos: async (): Promise<Promo[]> => {
-    return apiCall<{ data: Promo[] }>('/promos').then(res => res.data);
+    return apiCall<Promo[]>('/promos');
   },
 
   validatePromo: async (code: string): Promise<Promo> => {
-    return apiCall<{ success: boolean; data: Promo }>(`/promos/validate?code=${code}`).then(res => res.data);
+    return apiCall<Promo>(`/promos/validate?code=${code}`);
   },
 
   createPromo: async (data: {
@@ -822,8 +874,7 @@ export const stockAPI = {
   },
 
   getMenuItemMaterials: async (menuItemId: number): Promise<MenuItemMaterial[]> => {
-    const response = await apiCall<{ success: boolean, data: MenuItemMaterial[] }>(`/stock/menu-item-materials/${menuItemId}`);
-    return response.data;
+    return apiCall<MenuItemMaterial[]>(`/stock/menu-item-materials/${menuItemId}`);
   },
 
   addMenuItemMaterial: async (data: { menu_item_id: number; raw_material_id: number; quantity_used: number }): Promise<void> => {

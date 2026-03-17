@@ -79,7 +79,7 @@ export default function POSPage() {
                 menuAPI.getAddOns() as Promise<any>
             ]);
             setCategories(cats);
-            setAddOns(addonsRes.data || addonsRes || []);
+            setAddOns(addonsRes || []);
         } catch (err: any) {
             setError('Failed to load menu categories or addons');
         } finally {
@@ -92,7 +92,7 @@ export default function POSPage() {
             setLoading(true);
             const catId = selectedCategory === 'all' ? undefined : (selectedCategory as number);
             const response: any = await menuAPI.getMenuItems(catId);
-            setMenuItems(response.data || response || []);
+            setMenuItems(response || []);
         } catch (err: any) {
             setError('Failed to load menu items');
         } finally {
@@ -113,8 +113,7 @@ export default function POSPage() {
         setMemberError(null);
         setMemberInfo(null);
         try {
-            const res: any = await membersAPI.getMemberByCard(memberCardInput.trim());
-            const member = res.data || res;
+            const member = await membersAPI.getMemberByCard(memberCardInput.trim());
             setMemberInfo(member);
         } catch (err: any) {
             setMemberError(err.message || 'Member not found');

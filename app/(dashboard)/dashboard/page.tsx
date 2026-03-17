@@ -294,9 +294,9 @@ export default function DashboardPage() {
         />
         <Stat
           label="Profit Margin"
-          value={`${stats.gross_margin_percent.toFixed(1)}%`}
+          value={`${(stats.gross_margin || 0).toFixed(1)}%`}
           // icon="📊"
-          trend={calculateTrend(stats.gross_margin_percent, prevStats?.gross_margin_percent)}
+          trend={calculateTrend(stats.gross_margin, prevStats?.gross_margin)}
         />
       </div>
 
