@@ -44,7 +44,13 @@ export const authStorage = {
   getUser: (): User | null => {
     if (typeof window !== 'undefined') {
       const user = localStorage.getItem('user');
-      return user ? JSON.parse(user) : null;
+      if (!user || user === 'undefined') return null;
+      try {
+        return JSON.parse(user);
+      } catch (error) {
+        console.error('Failed to parse user from localStorage', error);
+        return null;
+      }
     }
     return null;
   },
