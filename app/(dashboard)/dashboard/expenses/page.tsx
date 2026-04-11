@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { expensesAPI, Expense } from '@/app/lib/api';
+import { expensesAPI, Expense, PaymentMethod } from '@/app/lib/api';
 import { Card, LoadingSkeleton, Button } from '@/app/components/ui';
 import { useProtectedRoute } from '@/app/lib/auth';
 
@@ -21,6 +21,11 @@ const formatDate = (dateString: string) => {
   });
 };
 
+const getPaymentMethodName = (code: string, methods: PaymentMethod[]) => {
+  const method = methods.find((m) => m.code === code);
+  return method ? method.name : code;
+};
+
 export default function ExpensesPage() {
   const { isLoading: routeLoading } = useProtectedRoute();
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -28,6 +33,7 @@ export default function ExpensesPage() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
@@ -38,6 +44,7 @@ export default function ExpensesPage() {
     category: '',
     description: '',
     amount: 0,
+    payment_method: 'cash',
     date: new Date().toISOString().split('T')[0],
   });
 
@@ -59,9 +66,22 @@ export default function ExpensesPage() {
     }
   };
 
+  const fetchPaymentMethods = async () => {
+    try {
+      const methods = await expensesAPI.getPaymentMethods();
+      setPaymentMethods(methods);
+      if (methods.length > 0 && !formData.payment_method) {
+        setFormData(prev => ({ ...prev, payment_method: methods[0].code }));
+      }
+    } catch (err) {
+      console.error('Failed to fetch payment methods', err);
+    }
+  };
+
   useEffect(() => {
     fetchExpenses(1);
     setPage(1);
+    fetchPaymentMethods();
   }, [expenseType, startDate, endDate]);
 
   useEffect(() => {
@@ -88,6 +108,7 @@ export default function ExpensesPage() {
         category: '',
         description: '',
         amount: 0,
+        payment_method: 'cash',
         date: new Date().toISOString().split('T')[0],
       });
       await fetchExpenses(1);
@@ -120,6 +141,7 @@ export default function ExpensesPage() {
         category: '',
         description: '',
         amount: 0,
+        payment_method: 'cash',
         date: new Date().toISOString().split('T')[0],
       });
       await fetchExpenses(page);
@@ -151,6 +173,7 @@ export default function ExpensesPage() {
       category: '',
       description: '',
       amount: 0,
+      payment_method: 'cash',
       date: new Date().toISOString().split('T')[0],
     });
     setShowCreateModal(true);
@@ -162,6 +185,7 @@ export default function ExpensesPage() {
       category: expense.category,
       description: expense.description,
       amount: expense.amount,
+      payment_method: expense.payment_method || 'cash',
       date: new Date(expense.date).toISOString().split('T')[0],
     });
     setSelectedExpense(expense);
@@ -263,6 +287,9 @@ export default function ExpensesPage() {
                 <th className="px-6 py-4 text-center text-sm font-semibold text-slate-900 dark:text-white">
                   Type
                 </th>
+                <th className="px-6 py-4 text-center text-sm font-semibold text-slate-900 dark:text-white">
+                  Payment
+                </th>
                 <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900 dark:text-white">
                   Actions
                 </th>
@@ -308,6 +335,11 @@ export default function ExpensesPage() {
                     <td className="px-6 py-4 text-center">
                       <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-sm font-semibold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
                         {expense.type}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className="text-sm font-medium text-slate-600 dark:text-slate-400 capitalize">
+                        {getPaymentMethodName(expense.payment_method, paymentMethods)}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right space-x-2">
@@ -412,6 +444,32 @@ export default function ExpensesPage() {
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Payment Method
+                </label>
+                <select
+                  value={formData.payment_method}
+                  onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
+                >
+                  {paymentMethods.length > 0 ? (
+                    paymentMethods.map((method) => (
+                      <option key={method.id} value={method.code}>
+                        {method.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="cash">Cash</option>
+                      <option value="transfer">Transfer</option>
+                      <option value="card">Card</option>
+                      <option value="other">Other</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
@@ -512,6 +570,32 @@ export default function ExpensesPage() {
                   placeholder="Expense details"
                   rows={3}
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Payment Method
+                </label>
+                <select
+                  value={formData.payment_method}
+                  onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
+                >
+                  {paymentMethods.length > 0 ? (
+                    paymentMethods.map((method) => (
+                      <option key={method.id} value={method.code}>
+                        {method.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="cash">Cash</option>
+                      <option value="transfer">Transfer</option>
+                      <option value="card">Card</option>
+                      <option value="other">Other</option>
+                    </>
+                  )}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

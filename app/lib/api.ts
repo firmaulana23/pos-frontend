@@ -146,6 +146,15 @@ export interface MenuItemsResponse {
   total_pages?: number;
 }
 
+export interface PaymentMethod {
+  id: number;
+  name: string;
+  code: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ApiError {
   message: string;
   code?: string;
@@ -316,8 +325,8 @@ export const menuAPI = {
     return apiCall('/public/add-ons?available=true');
   },
 
-  getPaymentMethods: async () => {
-    return apiCall('/public/payment-methods');
+  getPaymentMethods: async (): Promise<PaymentMethod[]> => {
+    return apiCall<PaymentMethod[]>('/public/payment-methods');
   },
 };
 
@@ -473,6 +482,7 @@ export interface Expense {
   category: string;
   description: string;
   amount: number;
+  payment_method: string;
   date: string;
   user_id: number;
   created_at: string;
@@ -506,11 +516,16 @@ export const expensesAPI = {
     return apiCallPaginated<Expense>(endpoint);
   },
 
+  getPaymentMethods: async (): Promise<PaymentMethod[]> => {
+    return apiCall<PaymentMethod[]>('/public/payment-methods');
+  },
+
   createExpense: async (data: {
     type: string;
     category: string;
     description: string;
     amount: number;
+    payment_method: string;
     date: string;
   }): Promise<Expense> => {
     return apiCall<Expense>('/expenses', {
@@ -524,6 +539,7 @@ export const expensesAPI = {
     category?: string;
     description?: string;
     amount?: number;
+    payment_method?: string;
     date?: string;
   }): Promise<Expense> => {
     return apiCall<Expense>(`/expenses/${id}`, {

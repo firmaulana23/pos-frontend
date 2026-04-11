@@ -1197,7 +1197,8 @@ Buat pengeluaran baru.
   "category": "Listrik",
   "description": "Bayar listrik bulan Maret",
   "amount": 500000,
-  "date": "2026-03-08"
+  "date": "2026-03-08",
+  "payment_method": "cash"
 }
 ```
 
@@ -1214,7 +1215,8 @@ Buat pengeluaran baru.
     "amount": 500000,
     "date": "2026-03-08T00:00:00Z",
     "user_id": 1,
-    "created_at": "2026-03-08T10:00:00+07:00"
+    "created_at": "2026-03-08T10:00:00+07:00",
+    "payment_method": "cash"
   }
 }
 ```
