@@ -92,6 +92,8 @@ export interface Transaction {
   created_at: string;
   updated_at: string;
   items: TransactionItem[];
+  member_id?: number;
+  member?: Member;
 }
 
 export interface TransactionsResponse {
@@ -576,6 +578,7 @@ export interface Member {
   card_number: string;
   points: number;
   discount: number;
+  point_value?: number;
   expired_date: string;
   created_at: string;
   updated_at: string;
@@ -729,6 +732,7 @@ export const membersAPI = {
     email: string;
     phone_number: string;
     discount: number;
+    point_value?: number;
     expired_date: string;
   }): Promise<Member> => {
     return apiCall<Member>('/members', {
@@ -742,6 +746,7 @@ export const membersAPI = {
     phone_number?: string;
     email?: string;
     discount?: number;
+    point_value?: number;
     expired_date?: string;
     is_active?: boolean;
   }): Promise<Member> => {
@@ -754,6 +759,13 @@ export const membersAPI = {
   deleteMember: async (id: number): Promise<{ message: string }> => {
     return apiCall<{ message: string }>(`/members/${id}`, {
       method: 'DELETE',
+    });
+  },
+
+  redeemPoints: async (id: number, menuItemId: number, quantity: number = 1): Promise<Member> => {
+    return apiCall<Member>(`/members/${id}/redeem`, {
+      method: 'POST',
+      body: JSON.stringify({ menu_item_id: menuItemId, quantity }),
     });
   },
 };

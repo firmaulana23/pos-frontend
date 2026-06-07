@@ -28,6 +28,7 @@ export default function MembersPage() {
     email: '',
     phone_number: '',
     discount: 0,
+    point_value: 500,
     expired_date: '',
   });
 
@@ -49,7 +50,7 @@ export default function MembersPage() {
   }, []);
 
   const handleCreate = async () => {
-    if (!formData.full_name || !formData.phone_number || !formData.discount || !formData.expired_date) {
+    if (!formData.full_name || !formData.phone_number || !formData.expired_date) {
       setError('Please fill in all required fields');
       return;
     }
@@ -84,6 +85,7 @@ export default function MembersPage() {
         phone_number: formData.phone_number,
         email: formData.email,
         discount: formData.discount,
+        point_value: formData.point_value,
         expired_date: `${formData.expired_date}T23:59:59Z`,
       });
       setShowEditModal(false);
@@ -116,6 +118,7 @@ export default function MembersPage() {
       email: '',
       phone_number: '',
       discount: 0,
+      point_value: 500,
       expired_date: '',
     });
     setShowCreateModal(true);
@@ -127,6 +130,7 @@ export default function MembersPage() {
       email: member.email || '',
       phone_number: member.phone_number,
       discount: member.discount,
+      point_value: member.point_value || 500,
       expired_date: member.expired_date.split('T')[0], // Format for input type="date"
     });
     setSelectedMember(member);
@@ -164,6 +168,7 @@ export default function MembersPage() {
                 <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900 dark:text-white">Full Name</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900 dark:text-white">Phone</th>
                 <th className="px-6 py-4 text-center text-sm font-semibold text-slate-900 dark:text-white">Points</th>
+                <th className="px-6 py-4 text-center text-sm font-semibold text-slate-900 dark:text-white">Point Value</th>
                 <th className="px-6 py-4 text-center text-sm font-semibold text-slate-900 dark:text-white">Discount</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900 dark:text-white">Expired Date</th>
                 <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900 dark:text-white">Actions</th>
@@ -172,7 +177,7 @@ export default function MembersPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center">
+                  <td colSpan={8} className="px-6 py-8 text-center">
                     <div className="inline-block">
                       <div className="w-8 h-8 border-4 border-slate-200 dark:border-slate-700 border-t-blue-500 rounded-full animate-spin"></div>
                     </div>
@@ -186,6 +191,7 @@ export default function MembersPage() {
                     <td className="px-6 py-4 font-semibold text-slate-900 dark:text-slate-50">{member.full_name}</td>
                     <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{member.phone_number}</td>
                     <td className="px-6 py-4 text-center text-slate-600 dark:text-slate-400">{member.points}</td>
+                    <td className="px-6 py-4 text-center text-slate-600 dark:text-slate-400">Rp {(member.point_value || 500).toLocaleString('id-ID')}</td>
                     <td className="px-6 py-4 text-center text-slate-600 dark:text-slate-400">{member.discount}%</td>
                     <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{formatDate(member.expired_date)}</td>
                     <td className="px-6 py-4 text-right space-x-2">
@@ -233,7 +239,11 @@ export default function MembersPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Discount (%)</label>
-                <input type="number" placeholder="Discount" value={formData.discount} onChange={(e) => setFormData({ ...formData, discount: parseInt(e.target.value) })} className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500" />
+                <input type="number" placeholder="Discount" value={formData.discount} onChange={(e) => setFormData({ ...formData, discount: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Point Value (Rp per Poin)</label>
+                <input type="number" placeholder="Point Value" value={formData.point_value} onChange={(e) => setFormData({ ...formData, point_value: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Expired Date</label>
@@ -270,7 +280,11 @@ export default function MembersPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Discount</label>
-                <input type="number" placeholder="Discount" value={formData.discount} onChange={(e) => setFormData({ ...formData, discount: Number(e.target.value) })} className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500" />
+                <input type="number" placeholder="Discount" value={formData.discount} onChange={(e) => setFormData({ ...formData, discount: Number(e.target.value) || 0 })} className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Point Value (Rp per Poin)</label>
+                <input type="number" placeholder="Point Value" value={formData.point_value} onChange={(e) => setFormData({ ...formData, point_value: Number(e.target.value) || 0 })} className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Expired Date</label>

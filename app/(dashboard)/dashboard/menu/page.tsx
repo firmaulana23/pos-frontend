@@ -28,6 +28,11 @@ export default function MenuPage() {
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Category Modal States
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [categoryName, setCategoryName] = useState('');
+  const [categoryDesc, setCategoryDesc] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -87,6 +92,36 @@ export default function MenuPage() {
     }, 400); // debounce API calls
     return () => clearTimeout(timer);
   }, [page, selectedCategory, searchTerm]);
+
+  const handleCreateCategory = async () => {
+    if (!categoryName.trim()) {
+      setError('Please enter a category name');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setError(null);
+      await adminMenuAPI.createCategory({
+        name: categoryName,
+        description: categoryDesc,
+      });
+      setShowCategoryModal(false);
+      setCategoryName('');
+      setCategoryDesc('');
+      await fetchCategories();
+    } catch (err: any) {
+      setError(err.message || 'Failed to create category');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openCategoryModal = () => {
+    setCategoryName('');
+    setCategoryDesc('');
+    setShowCategoryModal(true);
+  };
 
   const handleCreate = async () => {
     if (!formData.name || !formData.category_id || formData.price <= 0) {
@@ -288,9 +323,14 @@ export default function MenuPage() {
           <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Menu Items</h2>
           <p className="text-slate-600 dark:text-slate-400">Manage and view all menu items</p>
         </div>
-        <Button onClick={openCreateModal} className="bg-blue-500 hover:bg-blue-600">
-          + Add Item
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={openCategoryModal} className="bg-emerald-600 hover:bg-emerald-700 text-white border-0">
+            + Add Category
+          </Button>
+          <Button onClick={openCreateModal} className="bg-blue-500 hover:bg-blue-600">
+            + Add Item
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -850,6 +890,68 @@ export default function MenuPage() {
                 className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
               >
                 Close Formulation
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
+      {/* Create Category Modal */}
+      {showCategoryModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+                Add New Category
+              </h3>
+              <button
+                onClick={() => setShowCategoryModal(false)}
+                className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Name *
+                </label>
+                <input
+                  type="text"
+                  value={categoryName}
+                  onChange={(e) => setCategoryName(e.target.value)}
+                  className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
+                  placeholder="Category name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Description
+                </label>
+                <textarea
+                  value={categoryDesc}
+                  onChange={(e) => setCategoryDesc(e.target.value)}
+                  className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
+                  placeholder="Category description"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
+              <button
+                onClick={() => setShowCategoryModal(false)}
+                className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateCategory}
+                disabled={submitting}
+                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {submitting ? '⏳ Adding...' : 'Add Category'}
               </button>
             </div>
           </Card>

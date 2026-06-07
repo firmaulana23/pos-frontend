@@ -350,7 +350,7 @@ export default function TransactionsPage() {
                       </button>
                     </td>
                     <td className="px-6 py-4 text-slate-900 dark:text-slate-50">
-                      {transaction.customer_name || '-'}
+                      {transaction.customer_name || transaction.member?.full_name || '-'}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
                       {formatDate(transaction.created_at)}
@@ -453,7 +453,7 @@ export default function TransactionsPage() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Customer</p>
-                  <p className="text-slate-900 dark:text-slate-50">{selectedTransaction.customer_name || '-'}</p>
+                  <p className="text-slate-900 dark:text-slate-50">{selectedTransaction.customer_name || selectedTransaction.member?.full_name || '-'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Status</p>
