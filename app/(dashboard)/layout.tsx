@@ -9,7 +9,17 @@ interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
-const allNavItems = [
+interface NavItem {
+  href: string;
+  icon: string;
+  label: string;
+  badge: string | null;
+  roles: string[];
+  tenantOnly?: boolean;
+  superOnly?: boolean;
+}
+
+const allNavItems: NavItem[] = [
   { href: '/dashboard', icon: '📊', label: 'Dashboard', badge: null, roles: ['admin', 'manager', 'cashier'] },
   { href: '/dashboard/pos', icon: '🛒', label: 'POS', badge: null, roles: ['admin', 'manager', 'cashier'] },
   { href: '/dashboard/transactions', icon: '💳', label: 'Transactions', badge: null, roles: ['admin', 'manager', 'cashier'] },
@@ -20,6 +30,8 @@ const allNavItems = [
   { href: '/dashboard/promos', icon: '🎟️', label: 'Promos', badge: null, roles: ['admin', 'manager', 'cashier'] },
   { href: '/dashboard/members', icon: '🧑‍🤝‍🧑', label: 'Members', badge: null, roles: ['admin', 'manager', 'cashier'] },
   { href: '/dashboard/users', icon: '👥', label: 'Users', badge: null, roles: ['admin'] },
+  { href: '/dashboard/billing', icon: '💸', label: 'Langganan', badge: null, roles: ['admin'], tenantOnly: true },
+  { href: '/dashboard/super', icon: '👑', label: 'Super Admin', badge: null, roles: ['admin'], superOnly: true },
   { href: '/dashboard/settings', icon: '⚙️', label: 'Settings', badge: null, roles: ['admin'] },
 ];
 
@@ -28,11 +40,33 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const [navItems, setNavItems] = useState(allNavItems);
+  const [navItems, setNavItems] = useState<NavItem[]>([]);
 
   useEffect(() => {
     if (user) {
-      setNavItems(allNavItems.filter(item => item.roles.includes(user.role)));
+      const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+      const isIp = /^[0-9.]+$/.test(hostname);
+      const isLocalhost = hostname === 'localhost';
+      const parts = hostname.split('.');
+      const isTenant = !isIp && !isLocalhost && parts.length > 1;
+
+      const filtered = allNavItems.filter(item => {
+        if (!item.roles.includes(user.role)) return false;
+        
+        // Tenant-only items (like Billing) should only show on tenant subdomains
+        if (item.tenantOnly && !isTenant) return false;
+        
+        // Super-admin items should only show on the main domain
+        if (item.superOnly && isTenant) return false;
+        
+        // Hide standard POS functions on the main domain (except Dashboard, Users, Settings)
+        if (!isTenant && !item.superOnly && item.href !== '/dashboard' && item.href !== '/dashboard/settings' && item.href !== '/dashboard/users') {
+          return false;
+        }
+
+        return true;
+      });
+      setNavItems(filtered);
     }
   }, [user]);
 

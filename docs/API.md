@@ -2239,3 +2239,229 @@ Download laporan dalam format PDF.
 curl -O -J "http://localhost:8080/api/v1/reports/download/pdf?start_date=2026-03-01&end_date=2026-03-31" \
   -H "Authorization: Bearer <token>"
 ```
+
+---
+
+## SaaS Multi-Tenant & Subscription (🔓 Public / 🔒 Protected)
+
+Endpoints untuk mengelola registrasi tenant baru, daftar paket harga, status langganan, dan checkout pembayaran.
+
+### POST /register (🔓 Public)
+Mendaftarkan toko POS baru secara mandiri. Endpoint ini secara dinamis membuat skema database terisolasi untuk subdomain Anda.
+
+**Request:**
+```json
+{
+  "store_name": "Waw Coffee",
+  "subdomain": "wawcoffee",
+  "owner_email": "owner@wawcoffee.com",
+  "owner_username": "admin_wawcoffee",
+  "owner_full_name": "Muhamad Maulana",
+  "owner_password": "password123"
+}
+```
+
+**Response (210 Created):**
+```json
+{
+  "success": true,
+  "message": "Toko berhasil didaftarkan",
+  "data": {
+    "id": 2,
+    "name": "Waw Coffee",
+    "subdomain": "wawcoffee",
+    "owner_email": "owner@wawcoffee.com",
+    "plan_id": 1,
+    "status": "trial",
+    "trial_ends_at": "2026-06-19T14:35:12+07:00",
+    "created_at": "2026-06-05T14:35:12+07:00"
+  }
+}
+```
+
+### GET /plans (🔓 Public)
+Mendapatkan daftar seluruh paket harga berlangganan SaaS aktif.
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Plans retrieved successfully",
+  "data": [
+    {
+      "id": 1,
+      "name": "Trial",
+      "max_products": 50,
+      "max_users": 3,
+      "max_outlets": 1,
+      "has_reporting": false,
+      "monthly_price": 0,
+      "yearly_price": 0
+    },
+    {
+      "id": 2,
+      "name": "Starter",
+      "max_products": 200,
+      "max_users": 10,
+      "max_outlets": 3,
+      "has_reporting": true,
+      "monthly_price": 100000,
+      "yearly_price": 1000000
+    }
+  ]
+}
+```
+
+### GET /subscription/active (🔒 Protected - Owner only)
+Mendapatkan detail langganan aktif toko saat ini, lengkap dengan statistik konsumsi produk & staf secara realtime.
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Active subscription retrieved successfully",
+  "data": {
+    "id": 5,
+    "tenant_id": 2,
+    "plan_id": 1,
+    "billing_cycle": "monthly",
+    "status": "trial",
+    "current_period_start": "2026-06-05T14:35:12+07:00",
+    "current_period_end": "2026-06-19T14:35:12+07:00",
+    "plan": {
+      "id": 1,
+      "name": "Trial",
+      "max_products": 50,
+      "max_users": 3,
+      "max_outlets": 1,
+      "has_reporting": false
+    },
+    "usage": {
+      "products_count": 12,
+      "users_count": 2
+    }
+  }
+}
+```
+
+### GET /subscription/history (🔒 Protected - Owner only)
+Mendapatkan daftar riwayat transaksi pembayaran langganan toko.
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Subscription history retrieved successfully",
+  "data": [
+    {
+      "id": 1,
+      "payment_no": "PAY-20260605-001",
+      "plan_name": "Starter",
+      "amount": 100000,
+      "status": "paid",
+      "payment_method": "qris",
+      "paid_at": "2026-06-05T14:40:00+07:00",
+      "expiry_date": "2026-07-05T14:40:00+07:00"
+    }
+  ]
+}
+```
+
+### POST /subscription/upgrade (🔒 Protected - Owner only)
+Melakukan checkout upgrade langganan toko, mengembalikan Token Snap & Redirect URL Midtrans.
+
+**Request:**
+```json
+{
+  "plan_id": 2,
+  "cycle": "monthly"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Subscription upgrade generated",
+  "data": {
+    "snap_token": "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6",
+    "redirect_url": "https://app.sandbox.midtrans.com/snap/v2/vtweb/a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6"
+  }
+}
+```
+
+### POST /webhook/midtrans (🔓 Public Webhook)
+Endpoint callback untuk Midtrans IPN (Instant Payment Notification). Memproses verifikasi hash signature digital SHA512 dan otomatis mengaktifkan status langganan tenant terkait jika pembayaran berstatus lunas.
+
+---
+
+## Super Admin Portal (🔒 Platform Admin Only)
+
+Endpoints untuk keperluan pengelolaan tenant global, moderasi akun toko, dan pelaporan metrik SaaS.
+
+### GET /admin/stats (🔒 Protected)
+Mendapatkan metrik ringkasan platform SaaS global (estimasi MRR, total tenant per status).
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Global stats retrieved successfully",
+  "data": {
+    "total_tenants": 12,
+    "active_tenants": 4,
+    "trial_tenants": 6,
+    "suspended_tenants": 2,
+    "mrr": 1250000
+  }
+}
+```
+
+### GET /admin/tenants (🔒 Protected)
+Mendapatkan daftar seluruh tenant toko di platform.
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Tenants retrieved successfully",
+  "data": [
+    {
+      "id": 2,
+      "name": "Waw Coffee",
+      "subdomain": "wawcoffee",
+      "owner_email": "owner@wawcoffee.com",
+      "status": "trial",
+      "trial_ends_at": "2026-06-19T14:35:12+07:00",
+      "created_at": "2026-06-05T14:35:12+07:00",
+      "plan": {
+        "id": 1,
+        "name": "Trial"
+      }
+    }
+  ]
+}
+```
+
+### PATCH /admin/tenants/:id/suspend (🔒 Protected)
+Menangguhkan (suspend) toko secara manual untuk mematikan akses layanannya secara instan.
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Tenant suspended successfully"
+}
+```
+
+### PATCH /admin/tenants/:id/activate (🔒 Protected)
+Mengaktifkan kembali (reactivate) toko yang sedang ditangguhkan.
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Tenant activated successfully"
+}
+```
+

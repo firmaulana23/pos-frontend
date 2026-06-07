@@ -1,4 +1,40 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+const getBaseUrl = (): string => {
+  if (typeof window === 'undefined') {
+    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+  }
+  
+  const host = window.location.hostname; // e.g. "kopikulo.localhost" or "localhost"
+  const envUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+  
+  const isIp = /^[0-9.]+$/.test(host);
+  const isLocalhost = host === 'localhost';
+  const parts = host.split('.');
+
+  // If there's a subdomain in the current browser hostname (e.g. tenant.localhost or tenant.domain.com)
+  if (!isIp && !isLocalhost && parts.length > 1) {
+    const subdomain = parts[0];
+    try {
+      const urlObj = new URL(envUrl);
+      const envHostname = urlObj.hostname;
+      
+      if (envHostname === '192.168.1.141' || envHostname === 'localhost') {
+        if (envHostname === 'localhost') {
+          urlObj.hostname = `${subdomain}.localhost`;
+        } else {
+          urlObj.hostname = `${subdomain}.${envHostname}.nip.io`;
+        }
+      } else {
+        urlObj.hostname = `${subdomain}.${envHostname}`;
+      }
+      return urlObj.toString().replace(/\/$/, '');
+    } catch (e) {
+      return envUrl;
+    }
+  }
+  return envUrl;
+};
+
+const BASE_URL = getBaseUrl();
 
 // Types
 export interface LoginResponse {
@@ -904,5 +940,147 @@ export const stockAPI = {
     return apiCall<void>(`/stock/menu-item-materials/${menuItemId}/${rawMaterialId}`, {
       method: 'DELETE',
     });
+  },
+};
+
+// SaaS & Super Admin Types
+export interface Plan {
+  id: number;
+  name: string;
+  max_products: number;
+  max_users: number;
+  max_outlets: number;
+  has_reporting: boolean;
+  monthly_price: number;
+  yearly_price: number;
+}
+
+export interface Subscription {
+  id: number;
+  tenant_id: number;
+  plan_id: number;
+  status: 'active' | 'expired' | 'suspended';
+  start_date: string;
+  end_date: string;
+  trial_ends_at?: string;
+  plan?: Plan;
+  usage?: {
+    products_count: number;
+    users_count: number;
+  };
+}
+
+export interface SubscriptionHistory {
+  id: number;
+  payment_no: string;
+  plan_name: string;
+  amount: number;
+  status: string;
+  payment_method: string;
+  paid_at: string;
+  expiry_date: string;
+}
+
+export interface TenantAdmin {
+  id: number;
+  name: string;
+  subdomain: string;
+  owner_email: string;
+  status: 'trial' | 'active' | 'suspended';
+  trial_ends_at?: string;
+  created_at: string;
+  plan: Plan;
+  subscription?: Subscription;
+}
+
+export interface SuperAdminStats {
+  total_tenants: number;
+  active_tenants: number;
+  trial_tenants: number;
+  suspended_tenants: number;
+  estimated_mrr: number;
+}
+
+// SaaS API endpoints
+export const saasAPI = {
+  registerTenant: async (data: {
+    store_name: string;
+    subdomain: string;
+    owner_email: string;
+    owner_username: string;
+    owner_full_name: string;
+    owner_password: string;
+  }): Promise<any> => {
+    let registerUrl = `${BASE_URL}/register`;
+    try {
+      const urlObj = new URL(BASE_URL);
+      const parts = urlObj.hostname.split('.');
+      if (parts.length > 2 && urlObj.hostname.includes('nip.io')) {
+        urlObj.hostname = parts.slice(1).join('.');
+      } else if (parts.length > 2 && !urlObj.hostname.includes('nip.io') && !/^[0-9.]+$/.test(urlObj.hostname)) {
+        urlObj.hostname = parts.slice(1).join('.');
+      } else if (parts.length === 2 && parts[1] === 'localhost') {
+        urlObj.hostname = 'localhost';
+      }
+      registerUrl = `${urlObj.toString().replace(/\/$/, '')}/register`;
+    } catch (e) {}
+
+    const response = await fetch(registerUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw {
+        message: errorData.message || `HTTP ${response.status}`,
+        code: response.status.toString(),
+        details: errorData,
+      } as ApiError;
+    }
+    return response.json();
+  },
+
+  getPlans: async (): Promise<Plan[]> => {
+    return apiCall<Plan[]>('/plans');
+  },
+
+  getActiveSubscription: async (): Promise<Subscription> => {
+    return apiCall<Subscription>('/subscription/active');
+  },
+
+  getSubscriptionHistory: async (): Promise<SubscriptionHistory[]> => {
+    return apiCall<SubscriptionHistory[]>('/subscription/history');
+  },
+
+  upgradeSubscription: async (planId: number, cycle: 'monthly' | 'yearly'): Promise<{ snap_token: string; redirect_url: string }> => {
+    return apiCall<{ snap_token: string; redirect_url: string }>('/subscription/upgrade', {
+      method: 'POST',
+      body: JSON.stringify({ plan_id: planId, cycle }),
+    });
+  },
+};
+
+// Super Admin API endpoints
+export const superAdminAPI = {
+  getTenants: async (): Promise<TenantAdmin[]> => {
+    return apiCall<TenantAdmin[]>('/admin/tenants');
+  },
+
+  suspendTenant: async (id: number): Promise<{ message: string }> => {
+    return apiCall<{ message: string }>(`/admin/tenants/${id}/suspend`, {
+      method: 'PATCH',
+    });
+  },
+
+  activateTenant: async (id: number): Promise<{ message: string }> => {
+    return apiCall<{ message: string }>(`/admin/tenants/${id}/activate`, {
+      method: 'PATCH',
+    });
+  },
+
+  getStats: async (): Promise<SuperAdminStats> => {
+    return apiCall<SuperAdminStats>('/admin/stats');
   },
 };

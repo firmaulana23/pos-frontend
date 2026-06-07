@@ -340,15 +340,45 @@ try {
 {error && <div className="text-red-600">{error}</div>}
 ```
 
+## 🌐 SaaS & Multi-Tenant Patterns
+
+### 1. Dynamic Subdomain Resolution (`app/lib/api.ts`)
+Aplikasi frontend Next.js ini secara dinamis menyelesaikan subdomain host browser untuk memetakan domain API backend yang tepat per tenant:
+* Jika berada di domain utama (`localhost:3000` atau `192.168.1.141:3000`), `BASE_URL` tetap bernilai `NEXT_PUBLIC_API_URL` (skema core `public`).
+* Jika berada di subdomain (`kopikulo.localhost:3000`), `BASE_URL` secara dinamis diubah menjadi `http://kopikulo.localhost:8080/api/v1` (atau via DNS `nip.io` `http://kopikulo.192.168.1.141.nip.io:8080/api/v1` pada IP lokal).
+
+### 2. Integrasi Pembayaran Midtrans Snap (`app/(dashboard)/dashboard/billing/page.tsx`)
+Untuk memicu pembayaran digital, kita memuat SDK Midtrans secara dinamis menggunakan modul `<Script>` Next.js:
+```typescript
+import Script from 'next/script';
+
+<Script
+  src="https://app.sandbox.midtrans.com/snap/snap.js"
+  data-client-key={process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY}
+  strategy="afterInteractive"
+/>
+```
+Proses pembayaran dipicu via handler:
+```typescript
+const response = await saasAPI.upgradeSubscription(planId, cycle);
+window.snap.pay(response.snap_token, {
+  onSuccess: (result) => { /* update UI */ },
+  onPending: (result) => { /* show info pending */ },
+  onError: (result) => { /* show error */ }
+});
+```
+
+---
+
 ## 🆘 Troubleshooting
 
-| Issue | Solution |
+| Kendala | Solusi |
 |-------|----------|
-| Login fails | Check `.env.local` API URL |
-| Charts don't show | Verify API returns data |
-| Token not persisting | Check localStorage is enabled |
-| Dark mode not working | Ensure `<html>` has `suppressHydrationWarning` |
-| Build errors | Check TypeScript errors with `npm run lint` |
+| Login gagal (404/Not Found) | Periksa apakah Anda mencoba masuk menggunakan IP/subdomain yang salah. Pastikan API backend berjalan. |
+| Koneksi database core terputus / tabel `plans` hilang | Pastikan skema `public` telah di-seeding (`go run cmd/seed/main.go`) dan database backend sudah di-restart. |
+| Popup Midtrans Snap tidak terbuka | Pastikan `Script` Snap SDK termuat di browser (lihat konsol untuk error `window.snap is undefined`) dan variabel client-key sudah benar di `.env.local`. |
+| Tombol Super Admin tidak muncul | Tombol Super Admin hanya dimuat secara dinamis jika pengguna login sebagai `admin` dari domain utama platform (tanpa subdomain). |
+| Build error Next.js | Periksa kesalahan penulisan tipe data TypeScript dengan perintah `npm run lint`. |
 
 ## 📚 Useful Links
 
