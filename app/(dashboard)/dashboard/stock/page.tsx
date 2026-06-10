@@ -42,7 +42,7 @@ export default function StockPage() {
     // Form states
     const [formData, setFormData] = useState({ name: '', unit: 'kg', stock: 0 });
     const [operationData, setOperationData] = useState({ raw_material_id: 0, quantity: 0, notes: '' });
-    const [opnameData, setOpnameData] = useState<Array<{ raw_material_id: number, ending_stock: number, notes: string }>>([]);
+    const [opnameData, setOpnameData] = useState<Array<{ raw_material_id: number, ending_stock: number | string, notes: string }>>([]);
 
     const fetchData = async () => {
         try {
@@ -123,15 +123,20 @@ export default function StockPage() {
     };
 
     const handleOpname = async () => {
-        const validOpnames = opnameData.filter(op => op.ending_stock >= 0);
-        if (validOpnames.length === 0) return setError('No valid stock opname data to submit');
+        const mappedOpnames = opnameData.map(op => {
+            const mat = materials.find(m => m.id === op.raw_material_id);
+            const ending_stock = op.ending_stock === '' ? (mat ? mat.current_stock : 0) : Number(op.ending_stock);
+            return {
+                raw_material_id: op.raw_material_id,
+                ending_stock,
+                notes: op.notes || undefined
+            };
+        });
+
+        if (mappedOpnames.length === 0) return setError('No valid stock opname data to submit');
         try {
             setSubmitting(true);
-            await stockAPI.createDailySummary(validOpnames.map(op => ({
-                raw_material_id: op.raw_material_id,
-                ending_stock: op.ending_stock,
-                notes: op.notes || undefined
-            })));
+            await stockAPI.createDailySummary(mappedOpnames);
             setShowOpnameModal(false);
             await fetchData();
         } catch (err: any) { setError(err.message || 'Failed to create stock opname'); }
@@ -139,7 +144,7 @@ export default function StockPage() {
     };
 
     const openOpnameModal = () => {
-        setOpnameData(materials.map(m => ({ raw_material_id: m.id, ending_stock: m.current_stock, notes: '' })));
+        setOpnameData(materials.map(m => ({ raw_material_id: m.id, ending_stock: '', notes: '' })));
         setError(null);
         setShowOpnameModal(true);
     };
@@ -444,12 +449,13 @@ export default function StockPage() {
                                             <td className="p-3 text-center font-medium text-slate-500 dark:text-slate-400">{m.current_stock}</td>
                                             <td className="p-3 text-center">
                                                 <input
-                                                    type="number" min="0"
-                                                    value={opnameData.find(op => op.raw_material_id === m.id)?.ending_stock ?? m.current_stock}
+                                                    type="number"
+                                                    value={opnameData.find(op => op.raw_material_id === m.id)?.ending_stock ?? ''}
+                                                    placeholder={String(m.current_stock)}
                                                     onChange={(e) => {
                                                         const newDat = [...opnameData];
                                                         const idx = newDat.findIndex(op => op.raw_material_id === m.id);
-                                                        if (idx > -1) newDat[idx].ending_stock = Math.max(0, Number(e.target.value));
+                                                        if (idx > -1) newDat[idx].ending_stock = e.target.value === '' ? '' : Number(e.target.value);
                                                         setOpnameData(newDat);
                                                     }}
                                                     className="input-field text-center w-24 py-1 !px-2"

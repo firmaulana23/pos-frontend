@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { menuAPI, transactionsAPI, membersAPI, promosAPI, Category, MenuItem, Member, Promo } from '@/app/lib/api';
+import { useEffect, useState } from 'react';
+import { menuAPI, transactionsAPI, membersAPI, promosAPI, Category, MenuItem, Member, Promo, PaymentMethod } from '@/app/lib/api';
 import { Card } from '@/app/components/ui';
 
 interface AddOn {
@@ -26,6 +26,27 @@ const formatCurrency = (value: number) => {
         currency: 'IDR',
         minimumFractionDigits: 0,
     }).format(value);
+};
+
+const getPaymentMethodEmoji = (method: string) => {
+    if (!method) return '💰';
+    switch (method.toLowerCase()) {
+        case 'cash':
+            return '💵';
+        case 'qris':
+            return '📱';
+        case 'card':
+        case 'debit':
+        case 'credit':
+            return '💳';
+        case 'digital_wallet':
+        case 'gopay':
+        case 'ovo':
+        case 'dana':
+            return '👜';
+        default:
+            return '💰';
+    }
 };
 
 export default function POSPage() {
@@ -54,7 +75,6 @@ export default function POSPage() {
     // Member State
     const [memberCardInput, setMemberCardInput] = useState('');
     const [memberInfo, setMemberInfo] = useState<Member | null>(null);
-    const [memberLoading, setMemberLoading] = useState(false);
     const [memberError, setMemberError] = useState<string | null>(null);
 
     // Points Redemption State
@@ -65,12 +85,54 @@ export default function POSPage() {
     // Promo State
     const [promoCodeInput, setPromoCodeInput] = useState('');
     const [promoInfo, setPromoInfo] = useState<Promo | null>(null);
-    const [promoLoading, setPromoLoading] = useState(false);
     const [promoError, setPromoError] = useState<string | null>(null);
+    // Picker list and search states
+    const [members, setMembers] = useState<Member[]>([]);
+    const [promos, setPromos] = useState<Promo[]>([]);
+    const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+    const [loadingMembers, setLoadingMembers] = useState(false);
+    const [loadingPromos, setLoadingPromos] = useState(false);
+    const [showMemberPickerModal, setShowMemberPickerModal] = useState(false);
+    const [showPromoPickerModal, setShowPromoPickerModal] = useState(false);
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [memberSearchQuery, setMemberSearchQuery] = useState('');
+    const [promoSearchQuery, setPromoSearchQuery] = useState('');
 
     useEffect(() => {
         fetchInitialData();
+        fetchMembersAndPromos();
     }, []);
+
+    const fetchMembersAndPromos = async () => {
+        setLoadingMembers(true);
+        setLoadingPromos(true);
+        try {
+            const list = await membersAPI.getMembers();
+            setMembers(list || []);
+        } catch (err) {
+            console.error('Failed to load members:', err);
+        } finally {
+            setLoadingMembers(false);
+        }
+
+        try {
+            const list = await promosAPI.getPromos();
+            setPromos(list || []);
+        } catch (err) {
+            console.error('Failed to load promos:', err);
+        } finally {
+            setLoadingPromos(false);
+        }
+
+        try {
+            const list = await menuAPI.getPaymentMethods();
+            setPaymentMethods(list.filter(pm => pm.is_active) || []);
+        } catch (err) {
+            console.error('Failed to load payment methods:', err);
+        }
+    };
+
+
 
     useEffect(() => {
         fetchMenuItems();
@@ -112,20 +174,6 @@ export default function POSPage() {
         : menuItems;
 
     // --- Member lookup ---
-    const handleLookupMember = async () => {
-        if (!memberCardInput.trim()) return;
-        setMemberLoading(true);
-        setMemberError(null);
-        setMemberInfo(null);
-        try {
-            const member = await membersAPI.getMemberByCard(memberCardInput.trim());
-            setMemberInfo(member);
-        } catch (err: any) {
-            setMemberError(err.message || 'Member not found');
-        } finally {
-            setMemberLoading(false);
-        }
-    };
 
     const handleClearMember = () => {
         setMemberCardInput('');
@@ -159,20 +207,6 @@ export default function POSPage() {
     };
 
     // --- Promo lookup ---
-    const handleApplyPromo = async () => {
-        if (!promoCodeInput.trim()) return;
-        setPromoLoading(true);
-        setPromoError(null);
-        setPromoInfo(null);
-        try {
-            const promo = await promosAPI.validatePromo(promoCodeInput.trim());
-            setPromoInfo(promo);
-        } catch (err: any) {
-            setPromoError(err.message || 'Invalid or expired promo code');
-        } finally {
-            setPromoLoading(false);
-        }
-    };
 
     const handleClearPromo = () => {
         setPromoCodeInput('');
@@ -326,6 +360,54 @@ export default function POSPage() {
 
         } catch (err: any) {
             setError(err.message || 'Failed to process transaction');
+        } finally {
+            setIsCheckingOut(false);
+        }
+    };
+
+    const handleCheckoutAndPay = async (paymentMethod: string) => {
+        if (cart.length === 0) return;
+
+        try {
+            setIsCheckingOut(true);
+            setError(null);
+            setShowPaymentModal(false);
+
+            const orderPayload: any = {
+                customer_name: customerName.trim() || undefined,
+                items: cart.map(c => ({
+                    menu_item_id: c.menu_item_id,
+                    quantity: c.quantity,
+                    add_ons: c.add_ons.map(a => ({
+                        add_on_id: a.add_on_id,
+                        quantity: a.quantity
+                    }))
+                }))
+            };
+
+            if (memberInfo) orderPayload.member_id = memberInfo.id;
+            if (promoInfo) orderPayload.promo_id = promoInfo.id;
+
+            // 1. Create the transaction
+            const transaction = await transactionsAPI.createTransaction(orderPayload);
+
+            // 2. Pay the transaction immediately
+            await transactionsAPI.payTransaction(transaction.id, paymentMethod);
+
+            // 3. Clear cart and states
+            setCart([]);
+            setCustomerName('');
+            setMemberCardInput('');
+            setMemberInfo(null);
+            setMemberError(null);
+            setPromoCodeInput('');
+            setPromoInfo(null);
+            setPromoError(null);
+            setCheckoutSuccess(true);
+            setTimeout(() => setCheckoutSuccess(false), 3000);
+
+        } catch (err: any) {
+            setError(err.message || 'Failed to process transaction and payment');
         } finally {
             setIsCheckingOut(false);
         }
@@ -516,42 +598,45 @@ export default function POSPage() {
                     {/* Member Card */}
                     <div>
                         {memberInfo ? (
-                            <div className="flex flex-col bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-lg p-3 gap-2">
+                            <div className="flex flex-col bg-green-50 dark:bg-green-955/30 border border-green-200 dark:border-green-800/80 rounded-xl p-3 gap-2 shadow-sm transition-all">
                                 <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-xs font-semibold text-green-800 dark:text-green-200">👤 {memberInfo.full_name}</p>
-                                        <p className="text-xs text-green-700 dark:text-green-300">Member discount: {memberInfo.discount}%</p>
-                                        <p className="text-xs text-orange-600 dark:text-orange-400 font-semibold mt-0.5">
-                                            Poin: {memberInfo.points} (senilai Rp {((memberInfo.points || 0) * (memberInfo.point_value || 500)).toLocaleString('id-ID')})
-                                        </p>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-lg">👤</span>
+                                        <div>
+                                            <p className="text-sm font-bold text-green-800 dark:text-green-200 leading-tight">{memberInfo.full_name}</p>
+                                            <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">{memberInfo.card_number} • Discount: {memberInfo.discount}%</p>
+                                        </div>
                                     </div>
-                                    <button onClick={handleClearMember} className="text-green-600 dark:text-green-400 hover:text-red-500 text-lg leading-none">✕</button>
+                                    <button onClick={handleClearMember} className="w-6 h-6 flex items-center justify-center text-green-600 dark:text-green-400 hover:text-red-500 dark:hover:text-red-400 rounded-full hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors">✕</button>
+                                </div>
+                                <div className="flex justify-between items-center bg-white dark:bg-slate-900/60 rounded-lg p-2 border border-green-100 dark:border-green-900/30 mt-1">
+                                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Poin Member:</span>
+                                    <span className="text-xs font-bold text-orange-600 dark:text-orange-400">
+                                        {memberInfo.points} pts (senilai Rp {((memberInfo.points || 0) * (memberInfo.point_value || 500)).toLocaleString('id-ID')})
+                                    </span>
                                 </div>
                                 <button 
                                     onClick={() => setShowRedeemModal(true)}
-                                    className="w-full py-1.5 px-3 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-colors flex justify-center items-center gap-1"
+                                    className="w-full py-1.5 px-3 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-colors flex justify-center items-center gap-1 shadow-sm mt-1"
                                 >
                                     🎁 Tukar Poin (Redeem)
                                 </button>
                             </div>
                         ) : (
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    placeholder="Member card number"
-                                    value={memberCardInput}
-                                    onChange={(e) => setMemberCardInput(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleLookupMember()}
-                                    className="flex-1 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500 text-sm"
-                                />
-                                <button
-                                    onClick={handleLookupMember}
-                                    disabled={memberLoading || !memberCardInput.trim()}
-                                    className="px-3 py-2 bg-slate-700 hover:bg-slate-800 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
-                                >
-                                    {memberLoading ? '...' : 'Apply'}
-                                </button>
-                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowMemberPickerModal(true)}
+                                className="w-full flex items-center justify-between p-4 bg-white dark:bg-slate-900 border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-green-500 dark:hover:border-green-500 rounded-xl transition-all group text-left cursor-pointer"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <span className="text-2xl group-hover:scale-110 transition-transform">👤</span>
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-800 dark:text-slate-200 leading-tight">Pilih Member</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Ketuk untuk memilih dari daftar member</p>
+                                    </div>
+                                </div>
+                                <span className="text-slate-400 group-hover:text-green-500 transition-colors">➔</span>
+                            </button>
                         )}
                         {memberError && <p className="text-xs text-red-500 mt-1">{memberError}</p>}
                     </div>
@@ -559,36 +644,43 @@ export default function POSPage() {
                     {/* Promo Code */}
                     <div>
                         {promoInfo ? (
-                            <div className="flex items-center justify-between bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg px-3 py-2">
-                                <div>
-                                    <p className="text-xs font-semibold text-purple-800 dark:text-purple-200">🏷️ {promoInfo.code} – {promoInfo.name}</p>
-                                    <p className="text-xs text-purple-700 dark:text-purple-300">
-                                        {promoInfo.discount_type === 'percentage'
-                                            ? `${promoInfo.discount_value}% off${promoInfo.max_discount > 0 ? ` (max ${formatCurrency(promoInfo.max_discount)})` : ''}`
-                                            : `${formatCurrency(promoInfo.discount_value)} off`
-                                        }
-                                    </p>
+                            <div className="flex items-center justify-between bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/80 rounded-xl p-3 gap-2 shadow-sm transition-all">
+                                <div className="flex items-center gap-2.5">
+                                    <span className="text-lg">🏷️</span>
+                                    <div>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-xs font-bold bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-1.5 py-0.5 rounded uppercase">
+                                                {promoInfo.code}
+                                            </span>
+                                            <span className="text-sm font-bold text-purple-900 dark:text-purple-200 leading-tight">
+                                                {promoInfo.name}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-purple-600 dark:text-purple-400 mt-0.5">
+                                            Discount: {promoInfo.discount_type === 'percentage'
+                                                ? `${promoInfo.discount_value}% off${promoInfo.max_discount > 0 ? ` (max ${formatCurrency(promoInfo.max_discount)})` : ''}`
+                                                : `${formatCurrency(promoInfo.discount_value)} off`
+                                            }
+                                        </p>
+                                    </div>
                                 </div>
-                                <button onClick={handleClearPromo} className="text-purple-600 dark:text-purple-400 hover:text-red-500 text-lg leading-none">✕</button>
+                                <button onClick={handleClearPromo} className="text-purple-600 dark:text-purple-400 hover:text-red-500 dark:hover:text-red-400 rounded-full hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors">✕</button>
                             </div>
                         ) : (
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    placeholder="Promo code"
-                                    value={promoCodeInput}
-                                    onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleApplyPromo()}
-                                    className="flex-1 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-purple-500 text-sm"
-                                />
-                                <button
-                                    onClick={handleApplyPromo}
-                                    disabled={promoLoading || !promoCodeInput.trim()}
-                                    className="px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
-                                >
-                                    {promoLoading ? '...' : 'Apply'}
-                                </button>
-                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowPromoPickerModal(true)}
+                                className="w-full flex items-center justify-between p-4 bg-white dark:bg-slate-900 border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-purple-500 dark:hover:border-purple-500 rounded-xl transition-all group text-left cursor-pointer"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <span className="text-2xl group-hover:scale-110 transition-transform">🏷️</span>
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-800 dark:text-slate-200 leading-tight">Pilih Promo</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Ketuk untuk menggunakan kupon promo</p>
+                                    </div>
+                                </div>
+                                <span className="text-slate-400 group-hover:text-purple-500 transition-colors">➔</span>
+                            </button>
                         )}
                         {promoError && <p className="text-xs text-red-500 mt-1">{promoError}</p>}
                     </div>
@@ -619,13 +711,24 @@ export default function POSPage() {
                         </div>
                     </div>
 
-                    <button
-                        onClick={handleCheckout}
-                        disabled={cart.length === 0 || isCheckingOut}
-                        className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-lg font-bold rounded-xl transition-colors shadow-sm flex justify-center items-center gap-2"
-                    >
-                        {isCheckingOut ? 'Processing...' : 'Charge Order'}
-                    </button>
+                    <div className="flex flex-col gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setShowPaymentModal(true)}
+                            disabled={cart.length === 0 || isCheckingOut}
+                            className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-base font-bold rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 cursor-pointer hover:shadow-md"
+                        >
+                            ⚡ Bayar Langsung
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleCheckout}
+                            disabled={cart.length === 0 || isCheckingOut}
+                            className="w-full py-2.5 px-4 bg-blue-600/10 dark:bg-blue-500/10 hover:bg-blue-600/20 text-blue-600 dark:text-blue-400 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-semibold rounded-xl transition-all flex justify-center items-center gap-2 cursor-pointer border border-blue-600/20"
+                        >
+                            💾 Simpan Transaksi
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -751,6 +854,273 @@ export default function POSPage() {
                                 })}
                         </div>
                     </Card>
+                </div>
+            )}
+
+            {/* Member Picker Modal */}
+            {showMemberPickerModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all">
+                    <Card className="w-full max-w-lg shadow-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden flex flex-col max-h-[85vh]">
+                        <div className="flex items-center justify-between mb-2 pb-4 border-b border-slate-200 dark:border-slate-700 p-6 pb-4">
+                            <div>
+                                <h3 className="text-xl font-bold text-slate-900 dark:text-white">Pilih Member</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Cari dan pilih member untuk transaksi ini</p>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setShowMemberPickerModal(false);
+                                    setMemberSearchQuery('');
+                                }}
+                                className="text-slate-400 hover:text-slate-650 dark:hover:text-slate-250 w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-750 transition-all text-xl cursor-pointer"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="px-6 py-2">
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
+                                <input
+                                    type="text"
+                                    placeholder="Cari berdasarkan nama, nomor kartu, atau nomor hp..."
+                                    value={memberSearchQuery}
+                                    onChange={(e) => setMemberSearchQuery(e.target.value)}
+                                    className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-50 text-sm focus:outline-none focus:border-green-500"
+                                />
+                                {memberSearchQuery && (
+                                    <button
+                                        onClick={() => setMemberSearchQuery('')}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650 dark:hover:text-slate-200 cursor-pointer"
+                                    >
+                                        ✕
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-6 space-y-3">
+                            {loadingMembers ? (
+                                <div className="space-y-3">
+                                    {[1, 2, 3].map(i => (
+                                        <div key={i} className="h-16 bg-slate-100 dark:bg-slate-700 rounded-xl animate-pulse" />
+                                    ))}
+                                </div>
+                            ) : members.filter(m => 
+                                m.full_name.toLowerCase().includes(memberSearchQuery.toLowerCase()) ||
+                                m.card_number.toLowerCase().includes(memberSearchQuery.toLowerCase()) ||
+                                m.phone_number.includes(memberSearchQuery)
+                            ).length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                                    <span className="text-4xl mb-2">👤</span>
+                                    <p className="text-sm">Tidak ada member ditemukan</p>
+                                </div>
+                            ) : (
+                                members.filter(m => 
+                                    m.full_name.toLowerCase().includes(memberSearchQuery.toLowerCase()) ||
+                                    m.card_number.toLowerCase().includes(memberSearchQuery.toLowerCase()) ||
+                                    m.phone_number.includes(memberSearchQuery)
+                                ).map((member) => (
+                                    <button
+                                        key={member.id}
+                                        onClick={() => {
+                                            setMemberInfo(member);
+                                            setMemberCardInput(member.card_number);
+                                            setShowMemberPickerModal(false);
+                                            setMemberSearchQuery('');
+                                        }}
+                                        className="w-full flex items-center justify-between p-4 rounded-xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-green-500 dark:hover:border-green-500 hover:shadow-sm transition-all text-left group cursor-pointer"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-full bg-green-50 dark:bg-green-950/40 text-green-600 dark:text-green-400 flex items-center justify-center font-bold text-sm">
+                                                {member.full_name.charAt(0).toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-slate-900 dark:text-slate-50 text-sm group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">
+                                                    {member.full_name}
+                                                </p>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                                    No: {member.card_number} • Hp: {member.phone_number}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right flex flex-col items-end">
+                                            <span className="inline-block px-2.5 py-0.5 rounded-md text-xs font-bold bg-green-50 dark:bg-green-950/50 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800/40">
+                                                Disc {member.discount}%
+                                            </span>
+                                            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">{member.points} pts</p>
+                                        </div>
+                                    </button>
+                                ))
+                            )}
+                        </div>
+                    </Card>
+                </div>
+            )}
+
+            {/* Promo Picker Modal */}
+            {showPromoPickerModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all">
+                    <Card className="w-full max-w-lg shadow-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden flex flex-col max-h-[85vh]">
+                        <div className="flex items-center justify-between mb-2 pb-4 border-b border-slate-200 dark:border-slate-700 p-6 pb-4">
+                            <div>
+                                <h3 className="text-xl font-bold text-slate-900 dark:text-white">Pilih Promo</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Pilih kupon promo aktif untuk diskon tambahan</p>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setShowPromoPickerModal(false);
+                                    setPromoSearchQuery('');
+                                }}
+                                className="text-slate-400 hover:text-slate-650 dark:hover:text-slate-250 w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-750 transition-all text-xl cursor-pointer"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="px-6 py-2">
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
+                                <input
+                                    type="text"
+                                    placeholder="Cari kupon promo berdasarkan nama atau kode..."
+                                    value={promoSearchQuery}
+                                    onChange={(e) => setPromoSearchQuery(e.target.value)}
+                                    className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-50 text-sm focus:outline-none focus:border-purple-500"
+                                />
+                                {promoSearchQuery && (
+                                    <button
+                                        onClick={() => setPromoSearchQuery('')}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650 dark:hover:text-slate-200 cursor-pointer"
+                                    >
+                                        ✕
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-6 space-y-3">
+                            {loadingPromos ? (
+                                <div className="space-y-3">
+                                    {[1, 2, 3].map(i => (
+                                        <div key={i} className="h-16 bg-slate-100 dark:bg-slate-700 rounded-xl animate-pulse" />
+                                    ))}
+                                </div>
+                            ) : promos.filter(p => p.is_active && (
+                                p.name.toLowerCase().includes(promoSearchQuery.toLowerCase()) ||
+                                p.code.toLowerCase().includes(promoSearchQuery.toLowerCase())
+                            )).length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                                    <span className="text-4xl mb-2">🏷️</span>
+                                    <p className="text-sm">Tidak ada promo aktif ditemukan</p>
+                                </div>
+                            ) : (
+                                promos.filter(p => p.is_active && (
+                                    p.name.toLowerCase().includes(promoSearchQuery.toLowerCase()) ||
+                                    p.code.toLowerCase().includes(promoSearchQuery.toLowerCase())
+                                )).map((promo) => (
+                                    <button
+                                        key={promo.id}
+                                        onClick={() => {
+                                            setPromoInfo(promo);
+                                            setPromoCodeInput(promo.code);
+                                            setShowPromoPickerModal(false);
+                                            setPromoSearchQuery('');
+                                        }}
+                                        className="w-full flex flex-col p-4 rounded-xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-purple-500 dark:hover:border-purple-500 hover:shadow-sm transition-all text-left group gap-2 cursor-pointer"
+                                    >
+                                        <div className="flex justify-between items-start w-full">
+                                            <div className="flex items-center gap-2">
+                                                <span className="inline-block px-2.5 py-0.5 rounded-md text-xs font-bold bg-purple-50 dark:bg-purple-955/50 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-800/40 uppercase group-hover:bg-purple-100 group-hover:text-purple-800 dark:group-hover:bg-purple-900 transition-colors">
+                                                    {promo.code}
+                                                </span>
+                                                <h4 className="font-bold text-slate-900 dark:text-slate-50 text-sm">{promo.name}</h4>
+                                            </div>
+                                            <span className="text-sm font-black text-purple-600 dark:text-purple-400">
+                                                {promo.discount_type === 'percentage' 
+                                                    ? `${promo.discount_value}% OFF`
+                                                    : `-${formatCurrency(promo.discount_value)}`
+                                                }
+                                            </span>
+                                        </div>
+                                        {promo.description && (
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 leading-normal">
+                                                {promo.description}
+                                            </p>
+                                        )}
+                                        <div className="flex justify-between items-center text-[10px] text-slate-400 dark:text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-700/60 mt-1 w-full">
+                                            <span>Min. Order: {formatCurrency(promo.min_order_amount || 0)}</span>
+                                            <span>Max. Disc: {promo.max_discount > 0 ? formatCurrency(promo.max_discount) : 'Unlimited'}</span>
+                                        </div>
+                                    </button>
+                                ))
+                            )}
+                        </div>
+                    </Card>
+                </div>
+            )}
+
+            {/* Payment Modal for Pay Directly */}
+            {showPaymentModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-sm p-6 overflow-hidden flex flex-col">
+                        <div className="flex items-center justify-between mb-5">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Pilih Metode Pembayaran</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Total: <span className="font-bold text-blue-600 dark:text-blue-400">{formatCurrency(cartTotal)}</span></p>
+                            </div>
+                            <button 
+                                onClick={() => setShowPaymentModal(false)} 
+                                className="text-slate-400 hover:text-slate-650 dark:hover:text-slate-250 w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-805 transition-all text-xl cursor-pointer"
+                            >
+                                &times;
+                            </button>
+                        </div>
+
+                        <div className="space-y-2 mb-6 max-h-80 overflow-y-auto pr-1">
+                            {paymentMethods.length > 0 ? (
+                                paymentMethods.map((pm) => {
+                                    const icon = getPaymentMethodEmoji(pm.code);
+                                    const label = pm.name.toUpperCase();
+                                    return (
+                                        <button
+                                            key={pm.id}
+                                            onClick={() => handleCheckoutAndPay(pm.code)}
+                                            disabled={isCheckingOut}
+                                            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 text-slate-700 dark:text-slate-250 hover:bg-emerald-50/20 dark:hover:bg-emerald-955/25 font-bold transition-all text-left cursor-pointer group"
+                                        >
+                                            <span className="text-2xl group-hover:scale-110 transition-transform">{icon}</span>
+                                            <span>{label}</span>
+                                            <span className="ml-auto text-slate-400 group-hover:text-emerald-500 transition-colors">➔</span>
+                                        </button>
+                                    );
+                                })
+                            ) : (
+                                [
+                                    { code: 'cash', label: 'CASH', icon: '💵' },
+                                    { code: 'qris', label: 'QRIS', icon: '📱' },
+                                    { code: 'card', label: 'CARD', icon: '💳' },
+                                ].map(({ code, label, icon }) => (
+                                    <button
+                                        key={code}
+                                        onClick={() => handleCheckoutAndPay(code)}
+                                        disabled={isCheckingOut}
+                                        className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 text-slate-700 dark:text-slate-250 hover:bg-emerald-50/20 dark:hover:bg-emerald-955/25 font-bold transition-all text-left cursor-pointer group"
+                                    >
+                                        <span className="text-2xl group-hover:scale-110 transition-transform">{icon}</span>
+                                        <span>{label}</span>
+                                        <span className="ml-auto text-slate-400 group-hover:text-emerald-500 transition-colors">➔</span>
+                                    </button>
+                                ))
+                            )}
+                        </div>
+
+                        <button
+                            onClick={() => setShowPaymentModal(false)}
+                            className="w-full py-2.5 px-4 text-center text-sm font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                        >
+                            Batal
+                        </button>
+                    </div>
                 </div>
             )}
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { transactionsAPI, Transaction, TransactionsResponse } from '@/app/lib/api';
+import { transactionsAPI, Transaction, TransactionsResponse, menuAPI, PaymentMethod } from '@/app/lib/api';
 import { Card, LoadingSkeleton, Button } from '@/app/components/ui';
 import { useProtectedRoute } from '@/app/lib/auth';
 
@@ -35,15 +35,39 @@ const getStatusColor = (status: string) => {
 };
 
 const getPaymentMethodIcon = (method: string) => {
+  if (!method) return '💰';
   switch (method.toLowerCase()) {
     case 'cash':
       return 'Cash';
     case 'card':
+    case 'debit':
+    case 'credit':
       return 'Card';
     case 'qris':
       return 'Qris';
     case 'digital_wallet':
       return 'Digital Wallet';
+    default:
+      return method.charAt(0).toUpperCase() + method.slice(1).toLowerCase();
+  }
+};
+
+const getPaymentMethodEmoji = (method: string) => {
+  if (!method) return '💰';
+  switch (method.toLowerCase()) {
+    case 'cash':
+      return '💵';
+    case 'qris':
+      return '📱';
+    case 'card':
+    case 'debit':
+    case 'credit':
+      return '💳';
+    case 'digital_wallet':
+    case 'gopay':
+    case 'ovo':
+    case 'dana':
+      return '👜';
     default:
       return '💰';
   }
@@ -94,9 +118,23 @@ export default function TransactionsPage() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [payingId, setPayingId] = useState<number | null>(null);
   const [payModal, setPayModal] = useState<{ transactionId: number; method: string } | null>(null);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'all' | 'custom'>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+
+  const fetchPaymentMethods = async () => {
+    try {
+      const response = await menuAPI.getPaymentMethods();
+      setPaymentMethods(response.filter(pm => pm.is_active));
+    } catch (err) {
+      console.error('Failed to fetch payment methods:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchPaymentMethods();
+  }, []);
 
   const fetchTransactions = async (pageNum: number, currentSearch?: string) => {
     try {
@@ -379,7 +417,7 @@ export default function TransactionsPage() {
 
                       {transaction.status === 'pending' && (
                         <button
-                          onClick={() => setPayModal({ transactionId: transaction.id, method: 'cash' })}
+                          onClick={() => setPayModal({ transactionId: transaction.id, method: paymentMethods[0]?.code || 'cash' })}
                           disabled={payingId === transaction.id}
                           className="inline-flex items-center px-3 py-1 text-xs font-medium text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900 rounded transition-colors disabled:opacity-50"
                         >
@@ -542,25 +580,46 @@ export default function TransactionsPage() {
             </div>
 
             <div className="space-y-2 mb-6">
-              {[
-                { code: 'cash', label: 'Cash', icon: '💵' },
-                { code: 'qris', label: 'QRIS', icon: '📱' },
-                { code: 'card', label: 'Card', icon: '💳' },
-                { code: 'digital_wallet', label: 'Digital Wallet', icon: '👜' },
-              ].map(({ code, label, icon }) => (
-                <button
-                  key={code}
-                  onClick={() => setPayModal({ ...payModal, method: code })}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border-2 font-medium transition-all ${payModal.method === code
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-200'
-                      : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
-                    }`}
-                >
-                  <span className="text-xl">{icon}</span>
-                  <span>{label}</span>
-                  {payModal.method === code && <span className="ml-auto text-blue-500">✓</span>}
-                </button>
-              ))}
+              {paymentMethods.length > 0 ? (
+                paymentMethods.map((pm) => {
+                  const icon = getPaymentMethodEmoji(pm.code);
+                  const label = pm.name.charAt(0).toUpperCase() + pm.name.slice(1).toLowerCase();
+                  return (
+                    <button
+                      key={pm.id}
+                      onClick={() => setPayModal({ ...payModal, method: pm.code })}
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border-2 font-medium transition-all ${payModal.method === pm.code
+                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-200'
+                          : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+                        }`}
+                    >
+                      <span className="text-xl">{icon}</span>
+                      <span>{label}</span>
+                      {payModal.method === pm.code && <span className="ml-auto text-blue-500">✓</span>}
+                    </button>
+                  );
+                })
+              ) : (
+                [
+                  { code: 'cash', label: 'Cash', icon: '💵' },
+                  { code: 'qris', label: 'QRIS', icon: '📱' },
+                  { code: 'card', label: 'Card', icon: '💳' },
+                  { code: 'digital_wallet', label: 'Digital Wallet', icon: '👜' },
+                ].map(({ code, label, icon }) => (
+                  <button
+                    key={code}
+                    onClick={() => setPayModal({ ...payModal, method: code })}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border-2 font-medium transition-all ${payModal.method === code
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-200'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+                      }`}
+                  >
+                    <span className="text-xl">{icon}</span>
+                    <span>{label}</span>
+                    {payModal.method === code && <span className="ml-auto text-blue-500">✓</span>}
+                  </button>
+                ))
+              )}
             </div>
 
             <div className="flex gap-3">
