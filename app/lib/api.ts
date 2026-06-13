@@ -280,6 +280,13 @@ export const authAPI = {
   getProfile: async () => {
     return apiCall('/profile');
   },
+
+  changePassword: async (data: any): Promise<any> => {
+    return apiCall('/profile/password', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
 };
 
 // Dashboard API endpoints

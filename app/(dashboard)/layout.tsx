@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/app/lib/auth';
+import { authAPI } from '@/app/lib/api';
 import Link from 'next/link';
 
 interface DashboardLayoutProps {
@@ -29,6 +30,54 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [navItems, setNavItems] = useState(allNavItems);
+
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [passwordFormData, setPasswordFormData] = useState({
+    old_password: '',
+    new_password: '',
+    confirm_password: '',
+  });
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+  const [submittingPassword, setSubmittingPassword] = useState(false);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passwordFormData.old_password || !passwordFormData.new_password || !passwordFormData.confirm_password) {
+      setPasswordError('Silakan isi semua bidang');
+      return;
+    }
+    if (passwordFormData.new_password.length < 6) {
+      setPasswordError('Password baru minimal 6 karakter');
+      return;
+    }
+    if (passwordFormData.new_password !== passwordFormData.confirm_password) {
+      setPasswordError('Konfirmasi password baru tidak cocok');
+      return;
+    }
+
+    try {
+      setSubmittingPassword(true);
+      setPasswordError(null);
+      setPasswordSuccess(null);
+      await authAPI.changePassword(passwordFormData);
+      setPasswordSuccess('Password berhasil diubah!');
+      setPasswordFormData({
+        old_password: '',
+        new_password: '',
+        confirm_password: '',
+      });
+      setTimeout(() => {
+        setChangePasswordOpen(false);
+        setPasswordSuccess(null);
+      }, 1500);
+    } catch (err: any) {
+      setPasswordError(err.message || 'Gagal mengubah password');
+    } finally {
+      setSubmittingPassword(false);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -158,14 +207,47 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </button>
 
             {/* User menu */}
-            <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-800">
-              <div className="text-right">
+            <div className="relative flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-800">
+              <div className="text-right cursor-pointer select-none" onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}>
                 <p className="text-sm font-medium text-slate-900 dark:text-white">{user?.username}</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{user?.email}</p>
               </div>
-              <button className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full text-white font-bold text-sm">
+              <button 
+                onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+                className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full text-white font-bold text-sm hover:opacity-90 transition-opacity focus:outline-none"
+              >
                 {(user?.username?.[0] || 'A').toUpperCase()}
               </button>
+
+              {/* Profile Dropdown */}
+              {profileDropdownOpen && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-10" 
+                    onClick={() => setProfileDropdownOpen(false)}
+                  />
+                  <div className="absolute right-0 top-12 mt-2 w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg z-20 py-2">
+                    <button
+                      onClick={() => {
+                        setChangePasswordOpen(true);
+                        setProfileDropdownOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      🔑 Ganti Password
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleLogout();
+                        setProfileDropdownOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors border-t border-slate-100 dark:border-slate-700"
+                    >
+                      🚪 Logout
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -175,6 +257,102 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="p-8">{children}</div>
         </div>
       </div>
+
+      {/* Change Password Modal */}
+      {changePasswordOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white">Ganti Password</h3>
+              <button 
+                onClick={() => {
+                  setChangePasswordOpen(false);
+                  setPasswordError(null);
+                  setPasswordSuccess(null);
+                }} 
+                className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+              >
+                ✕
+              </button>
+            </div>
+
+            {passwordError && (
+              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
+                <p className="text-sm text-red-800 dark:text-red-200">{passwordError}</p>
+              </div>
+            )}
+
+            {passwordSuccess && (
+              <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg">
+                <p className="text-sm text-green-800 dark:text-green-200">{passwordSuccess}</p>
+              </div>
+            )}
+
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Password Saat Ini *
+                </label>
+                <input 
+                  type="password" 
+                  required
+                  placeholder="Password Saat Ini" 
+                  value={passwordFormData.old_password} 
+                  onChange={(e) => setPasswordFormData({ ...passwordFormData, old_password: e.target.value })} 
+                  className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500" 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Password Baru *
+                </label>
+                <input 
+                  type="password" 
+                  required
+                  placeholder="Password Baru (min 6 karakter)" 
+                  value={passwordFormData.new_password} 
+                  onChange={(e) => setPasswordFormData({ ...passwordFormData, new_password: e.target.value })} 
+                  className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500" 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Konfirmasi Password Baru *
+                </label>
+                <input 
+                  type="password" 
+                  required
+                  placeholder="Konfirmasi Password Baru" 
+                  value={passwordFormData.confirm_password} 
+                  onChange={(e) => setPasswordFormData({ ...passwordFormData, confirm_password: e.target.value })} 
+                  className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500" 
+                />
+              </div>
+
+              <div className="flex gap-3 mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setChangePasswordOpen(false);
+                    setPasswordError(null);
+                    setPasswordSuccess(null);
+                  }} 
+                  className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                >
+                  Batal
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={submittingPassword} 
+                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {submittingPassword ? 'Memproses...' : 'Simpan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
