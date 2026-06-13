@@ -918,3 +918,109 @@ export const stockAPI = {
     });
   },
 };
+
+// Report API Types
+export interface ReportSalesSummary {
+  total_transactions: number;
+  total_revenue: number;
+  total_tax: number;
+  total_discount: number;
+  total_sub_total: number;
+}
+
+export interface ReportPaymentMethodSummary {
+  payment_method: string;
+  count: number;
+  total: number;
+}
+
+export interface ReportPromoUsage {
+  promo_id: number;
+  promo_code: string;
+  promo_name: string;
+  used_count: number;
+  total_discount: number;
+}
+
+export interface ReportMemberActivity {
+  member_id: number;
+  full_name: string;
+  phone_number: string;
+  card_number: string;
+  points: number;
+  total_spent: number;
+}
+
+export interface ReportStockReceiptRow {
+  date: string;
+  raw_material: string;
+  unit: string;
+  quantity: number;
+  notes: string;
+}
+
+export interface ReportStockAdjustmentRow {
+  date: string;
+  raw_material: string;
+  unit: string;
+  quantity: number;
+  reason: string;
+  notes: string;
+}
+
+export interface ReportStockSummaryRow {
+  date: string;
+  raw_material: string;
+  unit: string;
+  beginning_stock: number;
+  receipts_in: number;
+  total_available: number;
+  ending_stock: number;
+  daily_usage: number;
+  theoretical_usage: number;
+  adjustments: number;
+  variance: number;
+}
+
+export interface ReportRedeemSummary {
+  total_redemptions: number;
+  total_points_used: number;
+  total_item_value: number;
+}
+
+export interface ReportStockMovementSummary {
+  raw_material: string;
+  unit: string;
+  total_in: number;
+  total_out: number;
+}
+
+export interface FullReport {
+  period: string;
+  start_date: string;
+  end_date: string;
+  generated_at: string;
+  sales_summary: ReportSalesSummary;
+  payment_method_breakdown: ReportPaymentMethodSummary[];
+  transactions: Transaction[];
+  redeem_summary: ReportRedeemSummary;
+  expense_total: number;
+  expenses: Expense[];
+  promo_usage: ReportPromoUsage[];
+  member_activity: ReportMemberActivity[];
+  stock_receipts: ReportStockReceiptRow[];
+  stock_adjustments: ReportStockAdjustmentRow[];
+  stock_summaries: ReportStockSummaryRow[];
+  stock_movements: ReportStockMovementSummary[];
+}
+
+export const reportAPI = {
+  getReport: async (startDate?: string, endDate?: string): Promise<FullReport> => {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+
+    const endpoint = `/report${params.toString() ? `?${params.toString()}` : ''}`;
+    return apiCall<FullReport>(endpoint);
+  },
+};
