@@ -515,11 +515,11 @@ export default function TransactionsPage() {
             <div className="mb-6">
               <h4 className="font-semibold text-slate-900 dark:text-white mb-3">Items</h4>
               <div className="space-y-2 bg-slate-50 dark:bg-slate-800 rounded-lg p-4">
-                {selectedTransaction.items.map((item) => (
+                {(selectedTransaction.items || []).map((item) => (
                   <div key={item.id} className="border-b border-slate-200 dark:border-slate-700 pb-2 last:border-b-0">
                     <div className="flex justify-between items-start mb-1">
                       <p className="font-medium text-slate-900 dark:text-slate-50">
-                        {item.menu_item.name} x{item.quantity}
+                        {item.menu_item?.name || 'Unknown Item'} x{item.quantity}
                       </p>
                       <p className="font-semibold text-slate-900 dark:text-slate-50">
                         {formatCurrency(item.total_price)}
@@ -529,7 +529,7 @@ export default function TransactionsPage() {
                       <div className="ml-4 text-sm text-slate-600 dark:text-slate-400">
                         {item.add_ons.map((addon) => (
                           <div key={addon.id}>
-                            + {addon.add_on.name} x{addon.quantity} ({formatCurrency(addon.total_price)})
+                            + {addon.add_on?.name || 'Unknown Add-on'} x{addon.quantity} ({formatCurrency(addon.total_price)})
                           </div>
                         ))}
                       </div>
