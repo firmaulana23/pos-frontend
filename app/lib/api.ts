@@ -82,7 +82,7 @@ export interface Transaction {
   id: number;
   transaction_no: string;
   customer_name: string | null;
-  status: 'pending' | 'paid';
+  status: 'pending' | 'paid' | 'canceled';
   payment_method: string;
   sub_total: number;
   tax: number;
@@ -341,7 +341,7 @@ export const menuAPI = {
 
 // Transactions API endpoints
 export const transactionsAPI = {
-  getTransactions: async (status?: 'pending' | 'paid', limit: number = 10, page: number = 1, startDate?: string, endDate?: string, search?: string): Promise<TransactionsResponse> => {
+  getTransactions: async (status?: 'pending' | 'paid' | 'canceled', limit: number = 10, page: number = 1, startDate?: string, endDate?: string, search?: string): Promise<TransactionsResponse> => {
     const params = new URLSearchParams();
     if (status) params.append('status', status);
     params.append('limit', limit.toString());

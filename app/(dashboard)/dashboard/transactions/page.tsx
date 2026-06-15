@@ -29,6 +29,8 @@ const getStatusColor = (status: string) => {
       return 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200';
     case 'pending':
       return 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200';
+    case 'canceled':
+      return 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200';
     default:
       return 'bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200';
   }
@@ -111,7 +113,7 @@ export default function TransactionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [status, setStatus] = useState<'pending' | 'paid' | 'all'>('all');
+  const [status, setStatus] = useState<'pending' | 'paid' | 'canceled' | 'all'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [showDetails, setShowDetails] = useState(false);
@@ -141,7 +143,7 @@ export default function TransactionsPage() {
       setLoading(true);
       setError(null);
 
-      const statusFilter = status === 'all' ? undefined : (status as 'pending' | 'paid');
+      const statusFilter = status === 'all' ? undefined : (status as 'pending' | 'paid' | 'canceled');
       const limit = 10;
 
       let apiStartDate: string | undefined;
@@ -292,7 +294,7 @@ export default function TransactionsPage() {
             <select
               value={status}
               onChange={(e) => {
-                setStatus(e.target.value as 'pending' | 'paid' | 'all');
+                setStatus(e.target.value as 'pending' | 'paid' | 'canceled' | 'all');
                 setPage(1);
               }}
               className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
@@ -300,6 +302,7 @@ export default function TransactionsPage() {
               <option value="all">All Status</option>
               <option value="pending">Pending</option>
               <option value="paid">Paid</option>
+              <option value="canceled">Canceled</option>
             </select>
           </div>
 
@@ -425,13 +428,15 @@ export default function TransactionsPage() {
                         </button>
                       )}
 
-                      <button
-                        onClick={() => handleDelete(transaction.id)}
-                        disabled={deletingId === transaction.id}
-                        className="inline-flex items-center px-3 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900 rounded transition-colors disabled:opacity-50"
-                      >
-                        {deletingId === transaction.id ? '⏳' : '🗑'} Delete
-                      </button>
+                      {transaction.status !== 'canceled' && (
+                        <button
+                          onClick={() => handleDelete(transaction.id)}
+                          disabled={deletingId === transaction.id}
+                          className="inline-flex items-center px-3 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900 rounded transition-colors disabled:opacity-50"
+                        >
+                          {deletingId === transaction.id ? '⏳' : '🗑'} Delete
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))
