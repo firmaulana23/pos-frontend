@@ -50,6 +50,10 @@ export interface DashboardStats {
     payment_method: string;
     total_sales: number;
   }>;
+  expenses_by_payment_method?: Array<{
+    payment_method: string;
+    total_expenses: number;
+  }>;
 }
 
 // Transaction Types

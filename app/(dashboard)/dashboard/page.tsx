@@ -165,8 +165,17 @@ export default function DashboardPage() {
   const paymentMethodsData = (stats.sales_by_payment_method || []).map((item, index) => {
     const colors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4'];
     return {
-      label: item.payment_method.charAt(0).toUpperCase() + item.payment_method.slice(1),
+      label: item.payment_method ? (item.payment_method.charAt(0).toUpperCase() + item.payment_method.slice(1)) : 'Unknown',
       value: item.total_sales,
+      color: colors[index % colors.length],
+    };
+  });
+
+  const expensePaymentMethodsData = (stats.expenses_by_payment_method || []).map((item, index) => {
+    const colors = ['#ef4444', '#f97316', '#f59e0b', '#ec4899', '#8b5cf6', '#3b82f6'];
+    return {
+      label: item.payment_method ? (item.payment_method.charAt(0).toUpperCase() + item.payment_method.slice(1)) : 'Unknown',
+      value: item.total_expenses,
       color: colors[index % colors.length],
     };
   });
@@ -389,6 +398,13 @@ export default function DashboardPage() {
         <SimpleDonutChart
           data={paymentMethodsData}
           title="Sales by Payment Method"
+          formatValue={formatCurrency}
+        />
+
+        {/* Expense by payment method distribution */}
+        <SimpleDonutChart
+          data={expensePaymentMethodsData}
+          title="Expenses by Payment Method"
           formatValue={formatCurrency}
         />
       </div>
