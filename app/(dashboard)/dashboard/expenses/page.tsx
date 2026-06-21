@@ -59,12 +59,13 @@ export default function ExpensesPage() {
   const [expenseType, setExpenseType] = useState<'raw_material' | 'operational' | 'all'>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>('all');
 
   const fetchExpenses = async (pageNum: number) => {
     try {
       setLoading(true);
       setError(null);
-      const response = await expensesAPI.getExpenses(expenseType, pageNum, 10, startDate, endDate);
+      const response = await expensesAPI.getExpenses(expenseType, pageNum, 10, startDate, endDate, paymentMethodFilter);
       setExpenses(response.data);
       setTotalPages(response.total ? Math.ceil(response.total / 10) : 1);
     } catch (err: any) {
@@ -100,7 +101,7 @@ export default function ExpensesPage() {
     setPage(1);
     fetchPaymentMethods();
     fetchCategories();
-  }, [expenseType, startDate, endDate]);
+  }, [expenseType, startDate, endDate, paymentMethodFilter]);
 
   useEffect(() => {
     fetchExpenses(page);
@@ -277,6 +278,23 @@ export default function ExpensesPage() {
               <option value="all">All Types</option>
               <option value="raw_material">Raw Material</option>
               <option value="operational">Operational</option>
+            </select>
+          </div>
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Payment Method
+            </label>
+            <select
+              value={paymentMethodFilter}
+              onChange={(e) => setPaymentMethodFilter(e.target.value)}
+              className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500 capitalize"
+            >
+              <option value="all">All Payment Methods</option>
+              {paymentMethods.map((pm) => (
+                <option key={pm.id} value={pm.code}>
+                  {pm.name}
+                </option>
+              ))}
             </select>
           </div>
           <div className="flex-1">

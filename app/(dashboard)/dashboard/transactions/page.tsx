@@ -124,6 +124,7 @@ export default function TransactionsPage() {
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'all' | 'custom'>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>('all');
 
   const fetchPaymentMethods = async () => {
     try {
@@ -172,7 +173,8 @@ export default function TransactionsPage() {
         pageNum,
         apiStartDate,
         apiEndDate,
-        activeSearch || undefined
+        activeSearch || undefined,
+        paymentMethodFilter
       );
 
       setTransactions(response.data || []);
@@ -189,7 +191,7 @@ export default function TransactionsPage() {
       fetchTransactions(page, searchTerm);
     }, 400); // debounce API calls
     return () => clearTimeout(timer);
-  }, [page, status, searchTerm, dateRange, startDate, endDate]);
+  }, [page, status, searchTerm, dateRange, startDate, endDate, paymentMethodFilter]);
 
   const handlePay = async (transactionId: number, paymentMethod: string) => {
     try {
@@ -303,6 +305,26 @@ export default function TransactionsPage() {
               <option value="pending">Pending</option>
               <option value="paid">Paid</option>
               <option value="canceled">Canceled</option>
+            </select>
+          </div>
+
+          {/* Payment Method filter */}
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Payment Method</label>
+            <select
+              value={paymentMethodFilter}
+              onChange={(e) => {
+                setPaymentMethodFilter(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500 capitalize"
+            >
+              <option value="all">All Payment Methods</option>
+              {paymentMethods.map((pm) => (
+                <option key={pm.id} value={pm.code}>
+                  {pm.name}
+                </option>
+              ))}
             </select>
           </div>
 

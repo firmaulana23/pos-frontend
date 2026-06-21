@@ -345,7 +345,7 @@ export const menuAPI = {
 
 // Transactions API endpoints
 export const transactionsAPI = {
-  getTransactions: async (status?: 'pending' | 'paid' | 'canceled', limit: number = 10, page: number = 1, startDate?: string, endDate?: string, search?: string): Promise<TransactionsResponse> => {
+  getTransactions: async (status?: 'pending' | 'paid' | 'canceled', limit: number = 10, page: number = 1, startDate?: string, endDate?: string, search?: string, paymentMethod?: string): Promise<TransactionsResponse> => {
     const params = new URLSearchParams();
     if (status) params.append('status', status);
     params.append('limit', limit.toString());
@@ -353,6 +353,7 @@ export const transactionsAPI = {
     if (startDate) params.append('start_date', startDate);
     if (endDate) params.append('end_date', endDate);
     if (search) params.append('customer_name', search);
+    if (paymentMethod && paymentMethod !== 'all') params.append('payment_method', paymentMethod);
 
     const endpoint = `/transactions${params.toString() ? `?${params.toString()}` : ''}`;
     return apiCallPaginated<Transaction>(endpoint);
@@ -526,13 +527,14 @@ export interface ExpensesResponse {
 
 // Expenses API endpoints
 export const expensesAPI = {
-  getExpenses: async (type?: 'raw_material' | 'operational' | 'all', page: number = 1, limit: number = 10, startDate?: string, endDate?: string): Promise<ExpensesResponse> => {
+  getExpenses: async (type?: 'raw_material' | 'operational' | 'all', page: number = 1, limit: number = 10, startDate?: string, endDate?: string, paymentMethod?: string): Promise<ExpensesResponse> => {
     const params = new URLSearchParams();
     if (type && type !== 'all') params.append('type', type);
     params.append('page', page.toString());
     params.append('limit', limit.toString());
     if (startDate) params.append('start_date', startDate);
     if (endDate) params.append('end_date', endDate);
+    if (paymentMethod && paymentMethod !== 'all') params.append('payment_method', paymentMethod);
 
     const endpoint = `/expenses?${params.toString()}`;
     return apiCallPaginated<Expense>(endpoint);
