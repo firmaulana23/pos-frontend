@@ -409,7 +409,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
         <SimpleBarChart data={topItemsData} title="Top Selling Menu Items" color="#8b5cf6" />
 
         {/* Payment methods distribution */}
