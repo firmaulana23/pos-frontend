@@ -106,6 +106,8 @@ export interface Transaction {
   items: TransactionItem[];
   member_id?: number;
   member?: Member;
+  canceled_at?: string;
+  user?: User;
 }
 
 export interface TransactionsResponse {
@@ -1062,6 +1064,7 @@ export interface FullReport {
   sales_summary: ReportSalesSummary;
   payment_method_breakdown: ReportPaymentMethodSummary[];
   transactions: Transaction[];
+  canceled_transactions: Transaction[];
   redeem_summary: ReportRedeemSummary;
   expense_total: number;
   expenses: Expense[];

@@ -41,7 +41,7 @@ export default function ReportsPage() {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [exporting, setExporting] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'expenses' | 'promos_members' | 'stock'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'canceled_transactions' | 'expenses' | 'promos_members' | 'stock'>('overview');
 
   // Pending states for custom filter range
   const [pendingStartDate, setPendingStartDate] = useState<string>('');
@@ -216,15 +216,25 @@ export default function ReportsPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 border-b border-slate-200 dark:border-slate-800 pb-px">
-        {(['overview', 'transactions', 'expenses', 'promos_members', 'stock'] as const).map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 font-medium text-sm transition-colors border-b-2 capitalize -mb-px ${activeTab === tab ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-bold' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
-          >
-            {tab.replace('_', ' & ')}
-          </button>
-        ))}
+        {(['overview', 'transactions', 'canceled_transactions', 'expenses', 'promos_members', 'stock'] as const).map(tab => {
+          const labels: Record<string, string> = {
+            overview: 'Overview',
+            transactions: 'Transaksi Sukses',
+            canceled_transactions: 'Transaksi Batal',
+            expenses: 'Pengeluaran',
+            promos_members: 'Promo & Member',
+            stock: 'Stok',
+          };
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 font-medium text-sm transition-colors border-b-2 capitalize -mb-px ${activeTab === tab ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-bold' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
+            >
+              {labels[tab]}
+            </button>
+          );
+        })}
       </div>
 
       {report && (
@@ -320,7 +330,7 @@ export default function ReportsPage() {
                           <td className="px-4 py-3 font-semibold text-slate-900 dark:text-slate-50">{t.transaction_no}</td>
                           <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{t.created_at ? formatDate(t.created_at) : '-'}</td>
                           <td className="px-4 py-3 text-slate-800 dark:text-slate-200">{t.customer_name || '-'}</td>
-                          <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{t.member?.full_name || '-'}</td>
+                          <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{t.user?.full_name || t.user?.username || '-'}</td>
                           <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
                             {t.member && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 mb-1">M: {t.member.full_name}</span>}
                             {t.member_id && !t.member && <span className="text-xs text-slate-400">ID: {t.member_id}</span>}
@@ -330,6 +340,57 @@ export default function ReportsPage() {
                           <td className="px-4 py-3 text-right font-bold text-slate-900 dark:text-slate-50">{formatCurrency(t.total)}</td>
                           <td className="px-4 py-3 text-center">
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 uppercase">{t.payment_method}</span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+
+          {/* CANCELED TRANSACTIONS TAB */}
+          {activeTab === 'canceled_transactions' && (
+            <Card header={<h3 className="text-lg font-bold text-slate-900 dark:text-white">Canceled Transaction Logs</h3>}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+                      <th className="px-4 py-3 text-left font-semibold text-slate-900 dark:text-white">No Transaksi</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-900 dark:text-white">Tanggal Batal</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-900 dark:text-white">Tanggal Transaksi</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-900 dark:text-white">Customer</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-900 dark:text-white">Kasir</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-900 dark:text-white">Member / Promo</th>
+                      <th className="px-4 py-3 text-right font-semibold text-slate-900 dark:text-white">Subtotal</th>
+                      <th className="px-4 py-3 text-right font-semibold text-slate-900 dark:text-white">Discount</th>
+                      <th className="px-4 py-3 text-right font-semibold text-slate-900 dark:text-white">Total</th>
+                      <th className="px-4 py-3 text-center font-semibold text-slate-900 dark:text-white">Metode</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {!report.canceled_transactions || report.canceled_transactions.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} className="px-4 py-6 text-center text-slate-500">No canceled transactions recorded for this period.</td>
+                      </tr>
+                    ) : (
+                      report.canceled_transactions.map(t => (
+                        <tr key={t.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <td className="px-4 py-3 font-semibold text-slate-900 dark:text-slate-50">{t.transaction_no}</td>
+                          <td className="px-4 py-3 text-red-600 dark:text-red-400 font-medium">{t.canceled_at ? formatDate(t.canceled_at) : '-'}</td>
+                          <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{t.created_at ? formatDate(t.created_at) : '-'}</td>
+                          <td className="px-4 py-3 text-slate-800 dark:text-slate-200">{t.customer_name || '-'}</td>
+                          <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{t.user?.full_name || t.user?.username || '-'}</td>
+                          <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
+                            {t.member && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 mb-1">M: {t.member.full_name}</span>}
+                            {t.member_id && !t.member && <span className="text-xs text-slate-400">ID: {t.member_id}</span>}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-300">{formatCurrency(t.sub_total)}</td>
+                          <td className="px-4 py-3 text-right text-red-600 dark:text-red-400">{formatCurrency(t.discount)}</td>
+                          <td className="px-4 py-3 text-right font-bold text-slate-900 dark:text-slate-50">{formatCurrency(t.total)}</td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 uppercase">{t.payment_method || 'none'}</span>
                           </td>
                         </tr>
                       ))
