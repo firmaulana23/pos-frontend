@@ -54,6 +54,14 @@ export interface DashboardStats {
     payment_method: string;
     total_expenses: number;
   }>;
+  raw_material_expenses_by_payment_method?: Array<{
+    payment_method: string;
+    total_expenses: number;
+  }>;
+  operational_expenses_by_payment_method?: Array<{
+    payment_method: string;
+    total_expenses: number;
+  }>;
 }
 
 // Transaction Types

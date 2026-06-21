@@ -180,6 +180,24 @@ export default function DashboardPage() {
     };
   });
 
+  const rawMaterialPaymentMethodsData = (stats.raw_material_expenses_by_payment_method || []).map((item, index) => {
+    const colors = ['#f97316', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#3b82f6'];
+    return {
+      label: item.payment_method ? (item.payment_method.charAt(0).toUpperCase() + item.payment_method.slice(1)) : 'Unknown',
+      value: item.total_expenses,
+      color: colors[index % colors.length],
+    };
+  });
+
+  const operationalPaymentMethodsData = (stats.operational_expenses_by_payment_method || []).map((item, index) => {
+    const colors = ['#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b'];
+    return {
+      label: item.payment_method ? (item.payment_method.charAt(0).toUpperCase() + item.payment_method.slice(1)) : 'Unknown',
+      value: item.total_expenses,
+      color: colors[index % colors.length],
+    };
+  });
+
   return (
     <div className="space-y-8">
       {/* Header with date filter */}
@@ -405,6 +423,20 @@ export default function DashboardPage() {
         <SimpleDonutChart
           data={expensePaymentMethodsData}
           title="Expenses by Payment Method"
+          formatValue={formatCurrency}
+        />
+
+        {/* Raw Material Expense by payment method distribution */}
+        <SimpleDonutChart
+          data={rawMaterialPaymentMethodsData}
+          title="Raw Material Expenses by Payment Method"
+          formatValue={formatCurrency}
+        />
+
+        {/* Operational Expense by payment method distribution */}
+        <SimpleDonutChart
+          data={operationalPaymentMethodsData}
+          title="Operational Expenses by Payment Method"
           formatValue={formatCurrency}
         />
       </div>
