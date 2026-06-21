@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { expensesAPI, Expense, PaymentMethod } from '@/app/lib/api';
+import { expensesAPI, Expense, PaymentMethod, ExpenseCategory } from '@/app/lib/api';
 import { Card, LoadingSkeleton, Button } from '@/app/components/ui';
 import { useProtectedRoute } from '@/app/lib/auth';
 
@@ -41,12 +41,20 @@ export default function ExpensesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     type: 'raw_material',
+    category_id: undefined as number | undefined,
     category: '',
     description: '',
     amount: 0,
     payment_method: 'cash',
     date: new Date().toISOString().split('T')[0],
   });
+
+  const [categories, setCategories] = useState<ExpenseCategory[]>([]);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [catType, setCatType] = useState<'raw_material' | 'operational'>('raw_material');
+  const [newCatName, setNewCatName] = useState('');
+  const [editingCatId, setEditingCatId] = useState<number | null>(null);
+  const [editingCatName, setEditingCatName] = useState('');
 
   const [expenseType, setExpenseType] = useState<'raw_material' | 'operational' | 'all'>('all');
   const [startDate, setStartDate] = useState('');
@@ -78,10 +86,20 @@ export default function ExpensesPage() {
     }
   };
 
+  const fetchCategories = async () => {
+    try {
+      const data = await expensesAPI.getCategories();
+      setCategories(data);
+    } catch (err) {
+      console.error('Failed to fetch categories:', err);
+    }
+  };
+
   useEffect(() => {
     fetchExpenses(1);
     setPage(1);
     fetchPaymentMethods();
+    fetchCategories();
   }, [expenseType, startDate, endDate]);
 
   useEffect(() => {
@@ -105,6 +123,7 @@ export default function ExpensesPage() {
       setShowCreateModal(false);
       setFormData({
         type: 'raw_material',
+        category_id: undefined,
         category: '',
         description: '',
         amount: 0,
@@ -138,6 +157,7 @@ export default function ExpensesPage() {
       setSelectedExpense(null);
       setFormData({
         type: 'raw_material',
+        category_id: undefined,
         category: '',
         description: '',
         amount: 0,
@@ -170,6 +190,7 @@ export default function ExpensesPage() {
   const openCreateModal = () => {
     setFormData({
       type: 'raw_material',
+      category_id: undefined,
       category: '',
       description: '',
       amount: 0,
@@ -182,6 +203,7 @@ export default function ExpensesPage() {
   const openEditModal = (expense: Expense) => {
     setFormData({
       type: expense.type,
+      category_id: expense.category_id,
       category: expense.category,
       description: expense.description,
       amount: expense.amount,
@@ -190,6 +212,39 @@ export default function ExpensesPage() {
     });
     setSelectedExpense(expense);
     setShowEditModal(true);
+  };
+
+  const handleAddCategory = async () => {
+    if (!newCatName.trim()) return;
+    try {
+      await expensesAPI.createCategory({ name: newCatName.trim(), type: catType });
+      setNewCatName('');
+      await fetchCategories();
+    } catch (err: any) {
+      alert(err.message || 'Failed to add category');
+    }
+  };
+
+  const handleRenameCategory = async (id: number) => {
+    if (!editingCatName.trim()) return;
+    try {
+      await expensesAPI.updateCategory(id, { name: editingCatName.trim(), type: catType });
+      setEditingCatId(null);
+      setEditingCatName('');
+      await fetchCategories();
+    } catch (err: any) {
+      alert(err.message || 'Failed to rename category');
+    }
+  };
+
+  const handleDeleteCategory = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this category? Past expenses referencing this category will keep their name but this category will be removed for future expenses.')) return;
+    try {
+      await expensesAPI.deleteCategory(id);
+      await fetchCategories();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete category');
+    }
   };
 
   if (routeLoading) {
@@ -410,7 +465,7 @@ export default function ExpensesPage() {
                 </label>
                 <select
                   value={formData.type}
-                  onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, type: e.target.value, category_id: undefined, category: '' })}
                   className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
                 >
                   <option value="raw_material">Raw Material</option>
@@ -422,13 +477,36 @@ export default function ExpensesPage() {
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                   Category *
                 </label>
-                <input
-                  type="text"
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
-                  placeholder="e.g., Coffee Beans, Rent"
-                />
+                <div className="flex gap-2">
+                  <select
+                    value={formData.category_id || ''}
+                    onChange={(e) => {
+                      const id = e.target.value ? parseInt(e.target.value) : undefined;
+                      const name = categories.find((c) => c.id === id)?.name || '';
+                      setFormData({ ...formData, category_id: id, category: name });
+                    }}
+                    className="flex-1 px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">Select Category</option>
+                    {categories
+                      .filter((c) => c.type === formData.type)
+                      .map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCatType(formData.type as 'raw_material' | 'operational');
+                      setShowCategoryModal(true);
+                    }}
+                    className="px-3 py-2 border border-slate-300 hover:border-slate-400 dark:border-slate-600 dark:hover:border-slate-500 rounded-lg text-slate-600 dark:text-slate-400 text-sm flex items-center justify-center whitespace-nowrap"
+                  >
+                    ⚙️ Manage
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -538,7 +616,7 @@ export default function ExpensesPage() {
                 </label>
                 <select
                   value={formData.type}
-                  onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, type: e.target.value, category_id: undefined, category: '' })}
                   className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
                 >
                   <option value="raw_material">Raw Material</option>
@@ -550,13 +628,36 @@ export default function ExpensesPage() {
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                   Category *
                 </label>
-                <input
-                  type="text"
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
-                  placeholder="e.g., Coffee Beans, Rent"
-                />
+                <div className="flex gap-2">
+                  <select
+                    value={formData.category_id || ''}
+                    onChange={(e) => {
+                      const id = e.target.value ? parseInt(e.target.value) : undefined;
+                      const name = categories.find((c) => c.id === id)?.name || '';
+                      setFormData({ ...formData, category_id: id, category: name });
+                    }}
+                    className="flex-1 px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">Select Category</option>
+                    {categories
+                      .filter((c) => c.type === formData.type)
+                      .map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCatType(formData.type as 'raw_material' | 'operational');
+                      setShowCategoryModal(true);
+                    }}
+                    className="px-3 py-2 border border-slate-300 hover:border-slate-400 dark:border-slate-600 dark:hover:border-slate-500 rounded-lg text-slate-600 dark:text-slate-400 text-sm flex items-center justify-center whitespace-nowrap"
+                  >
+                    ⚙️ Manage
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -638,6 +739,128 @@ export default function ExpensesPage() {
                 className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50"
               >
                 {submitting ? '⏳ Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {showCategoryModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <Card className="w-full max-w-md">
+            <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+                Manage Categories
+              </h3>
+              <button
+                onClick={() => setShowCategoryModal(false)}
+                className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex gap-2 mb-4 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+              <button
+                type="button"
+                onClick={() => setCatType('raw_material')}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${catType === 'raw_material' ? 'bg-white dark:bg-slate-700 text-blue-500 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}
+              >
+                Raw Material
+              </button>
+              <button
+                type="button"
+                onClick={() => setCatType('operational')}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${catType === 'operational' ? 'bg-white dark:bg-slate-700 text-blue-500 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}
+              >
+                Operational
+              </button>
+            </div>
+
+            <div className="flex gap-2 mb-6">
+              <input
+                type="text"
+                value={newCatName}
+                onChange={(e) => setNewCatName(e.target.value)}
+                placeholder="New category name"
+                className="flex-1 px-3 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 text-sm focus:outline-none focus:border-blue-500"
+              />
+              <button
+                type="button"
+                onClick={handleAddCategory}
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold text-sm transition-colors"
+              >
+                Add
+              </button>
+            </div>
+
+            <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+              {categories.filter(c => c.type === catType).length === 0 ? (
+                <p className="text-center text-sm text-slate-500 py-4">No categories created yet.</p>
+              ) : (
+                categories
+                  .filter(c => c.type === catType)
+                  .map(cat => (
+                    <div key={cat.id} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 text-sm">
+                      {editingCatId === cat.id ? (
+                        <div className="flex-1 flex gap-2 mr-2">
+                          <input
+                            type="text"
+                            value={editingCatName}
+                            onChange={(e) => setEditingCatName(e.target.value)}
+                            className="flex-1 px-2 py-1 border border-slate-300 rounded text-slate-900 dark:text-white dark:bg-slate-700 focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRenameCategory(cat.id)}
+                            className="text-green-500 hover:text-green-600 font-semibold"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingCatId(null)}
+                            className="text-slate-400 hover:text-slate-500"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="font-medium text-slate-900 dark:text-slate-100">{cat.name}</span>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingCatId(cat.id);
+                                setEditingCatName(cat.name);
+                              }}
+                              className="text-blue-500 hover:text-blue-600 text-xs"
+                            >
+                              Rename
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCategory(cat.id)}
+                              className="text-red-500 hover:text-red-600 text-xs"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))
+              )}
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowCategoryModal(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+              >
+                Close
               </button>
             </div>
           </Card>

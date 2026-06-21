@@ -492,6 +492,7 @@ export const adminMenuAPI = {
 export interface Expense {
   id: number;
   type: string;
+  category_id?: number;
   category: string;
   description: string;
   amount: number;
@@ -505,6 +506,14 @@ export interface Expense {
     username: string;
     full_name: string;
   };
+}
+
+export interface ExpenseCategory {
+  id: number;
+  name: string;
+  type: 'raw_material' | 'operational';
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ExpensesResponse {
@@ -535,6 +544,7 @@ export const expensesAPI = {
 
   createExpense: async (data: {
     type: string;
+    category_id?: number;
     category: string;
     description: string;
     amount: number;
@@ -549,6 +559,7 @@ export const expensesAPI = {
 
   updateExpense: async (id: number, data: {
     type?: string;
+    category_id?: number;
     category?: string;
     description?: string;
     amount?: number;
@@ -563,6 +574,33 @@ export const expensesAPI = {
 
   deleteExpense: async (id: number): Promise<{ message: string }> => {
     return apiCall<{ message: string }>(`/expenses/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  getCategories: async (type?: string): Promise<ExpenseCategory[]> => {
+    const params = new URLSearchParams();
+    if (type) params.append('type', type);
+    const endpoint = `/expenses/categories${params.toString() ? `?${params.toString()}` : ''}`;
+    return apiCall<ExpenseCategory[]>(endpoint);
+  },
+
+  createCategory: async (data: { name: string; type: string }): Promise<ExpenseCategory> => {
+    return apiCall<ExpenseCategory>('/expenses/categories', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateCategory: async (id: number, data: { name: string; type: string }): Promise<ExpenseCategory> => {
+    return apiCall<ExpenseCategory>(`/expenses/categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteCategory: async (id: number): Promise<void> => {
+    return apiCall<void>(`/expenses/categories/${id}`, {
       method: 'DELETE',
     });
   },
