@@ -16,6 +16,7 @@ const allNavItems = [
   { href: '/dashboard/transactions', icon: '💳', label: 'Transactions', badge: null, roles: ['admin', 'manager', 'cashier'] },
   { href: '/dashboard/menu', icon: '🍽️', label: 'Menu', badge: null, roles: ['admin', 'manager'] },
   { href: '/dashboard/reports', icon: '📈', label: 'Reports', badge: null, roles: ['admin', 'manager'] },
+  { href: '/dashboard/finance', icon: '💸', label: 'Finance', badge: null, roles: ['admin'] },
   { href: '/dashboard/expenses', icon: '💰', label: 'Expenses', badge: null, roles: ['admin', 'manager'] },
   { href: '/dashboard/stock', icon: '📦', label: 'Stock', badge: null, roles: ['admin', 'manager'] },
   { href: '/dashboard/promos', icon: '🎟️', label: 'Promos', badge: null, roles: ['admin', 'manager', 'cashier'] },

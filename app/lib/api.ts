@@ -1086,3 +1086,127 @@ export const reportAPI = {
     return apiCall<FullReport>(endpoint);
   },
 };
+
+// Finance API Types
+export interface FinanceCheck {
+  id: number;
+  start_date: string;
+  end_date: string;
+  checked_by_id: number;
+  checked_by: {
+    id: number;
+    username: string;
+    full_name: string;
+  };
+  expected_cash: number;
+  expected_rekening: number;
+  actual_cash: number;
+  actual_rekening: number;
+  difference_cash: number;
+  difference_rekening: number;
+  sales_cash: number;
+  sales_rekening: number;
+  sales_qris: number;
+  sales_bank_transfer: number;
+  expenses_cash: number;
+  expenses_rekening: number;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FinanceSummary {
+  start_date: string;
+  end_date: string;
+  starting_cash: number;
+  starting_rekening: number;
+  sales_cash: number;
+  sales_rekening: number;
+  sales_qris: number;
+  sales_bank_transfer: number;
+  expenses_cash: number;
+  expenses_rekening: number;
+  expected_cash: number;
+  expected_rekening: number;
+}
+
+export interface FinanceCheckResponse {
+  data: FinanceCheck[];
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+}
+
+export interface FinanceDashboardData {
+  total_income: number;
+  total_expenses: number;
+  net_cash_flow: number;
+  expected_cash: number;
+  expected_rekening: number;
+  actual_cash: number;
+  actual_rekening: number;
+  difference_cash: number;
+  difference_rekening: number;
+  last_check_date: string | null;
+  daily_trend: Array<{
+    date: string;
+    total_sales: number;
+    total_expenses: number;
+  }>;
+  sales_share: Array<{
+    payment_method: string;
+    total: number;
+  }>;
+  expenses_share: Array<{
+    payment_method: string;
+    total: number;
+  }>;
+  top_expense_categories: Array<{
+    category: string;
+    amount: number;
+  }>;
+  gross_profit: number;
+  net_profit: number;
+  opex_ratio: number;
+}
+
+export const financeAPI = {
+  getSummary: async (startDate: string, endDate: string): Promise<FinanceSummary> => {
+    const params = new URLSearchParams();
+    params.append('start_date', startDate);
+    params.append('end_date', endDate);
+    return apiCall<FinanceSummary>(`/finance/summary?${params.toString()}`);
+  },
+
+  getChecks: async (page: number = 1, limit: number = 10): Promise<FinanceCheckResponse> => {
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    return apiCallPaginated<FinanceCheck>(`/finance/checks?${params.toString()}`);
+  },
+
+  createCheck: async (data: {
+    start_date: string;
+    end_date: string;
+    starting_cash?: number;
+    starting_rekening?: number;
+    actual_cash: number;
+    actual_rekening: number;
+    notes?: string;
+  }): Promise<FinanceCheck> => {
+    return apiCall<FinanceCheck>('/finance/checks', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getDashboard: async (startDate?: string, endDate?: string): Promise<FinanceDashboardData> => {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    const endpoint = `/finance/dashboard${params.toString() ? `?${params.toString()}` : ''}`;
+    return apiCall<FinanceDashboardData>(endpoint);
+  },
+};
+
