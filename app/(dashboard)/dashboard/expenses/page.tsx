@@ -49,6 +49,13 @@ export default function ExpensesPage() {
     date: new Date().toISOString().split('T')[0],
   });
 
+  const [bulkType, setBulkType] = useState('raw_material');
+  const [bulkDate, setBulkDate] = useState(new Date().toISOString().split('T')[0]);
+  const [bulkPaymentMethod, setBulkPaymentMethod] = useState('cash');
+  const [bulkItems, setBulkItems] = useState<Array<{ category_id: number; category: string; description: string; amount: number }>>([
+    { category_id: 0, category: '', description: '', amount: 0 }
+  ]);
+
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [catType, setCatType] = useState<'raw_material' | 'operational'>('raw_material');
@@ -79,8 +86,11 @@ export default function ExpensesPage() {
     try {
       const methods = await expensesAPI.getPaymentMethods();
       setPaymentMethods(methods);
-      if (methods.length > 0 && !formData.payment_method) {
-        setFormData(prev => ({ ...prev, payment_method: methods[0].code }));
+      if (methods.length > 0) {
+        if (!formData.payment_method) {
+          setFormData(prev => ({ ...prev, payment_method: methods[0].code }));
+        }
+        setBulkPaymentMethod(methods[0].code);
       }
     } catch (err) {
       console.error('Failed to fetch payment methods', err);
@@ -108,33 +118,31 @@ export default function ExpensesPage() {
   }, [page]);
 
   const handleCreate = async () => {
-    if (!formData.category || !formData.description || formData.amount <= 0) {
-      setError('Please fill in all required fields');
+    if (bulkItems.some(item => !item.category_id || !item.description.trim() || item.amount <= 0)) {
+      setError('Please fill in Category, Description, and an Amount > 0 for all items');
       return;
     }
 
     try {
       setSubmitting(true);
       setError(null);
-      await expensesAPI.createExpense({
-        ...formData,
-        date: `${formData.date}T00:00:00Z`,
+      await expensesAPI.bulkCreateExpenses({
+        type: bulkType,
+        date: `${bulkDate}T00:00:00Z`,
+        payment_method: bulkPaymentMethod,
+        items: bulkItems.map(item => ({
+          category_id: item.category_id,
+          description: item.description.trim(),
+          amount: item.amount,
+        })),
       });
 
       setShowCreateModal(false);
-      setFormData({
-        type: 'raw_material',
-        category_id: undefined,
-        category: '',
-        description: '',
-        amount: 0,
-        payment_method: 'cash',
-        date: new Date().toISOString().split('T')[0],
-      });
+      setBulkItems([{ category_id: 0, category: '', description: '', amount: 0 }]);
       await fetchExpenses(1);
       setPage(1);
     } catch (err: any) {
-      setError(err.message || 'Failed to create expense');
+      setError(err.message || 'Failed to create expenses');
     } finally {
       setSubmitting(false);
     }
@@ -189,15 +197,10 @@ export default function ExpensesPage() {
   };
 
   const openCreateModal = () => {
-    setFormData({
-      type: 'raw_material',
-      category_id: undefined,
-      category: '',
-      description: '',
-      amount: 0,
-      payment_method: 'cash',
-      date: new Date().toISOString().split('T')[0],
-    });
+    setBulkType('raw_material');
+    setBulkDate(new Date().toISOString().split('T')[0]);
+    setBulkPaymentMethod(paymentMethods[0]?.code || 'cash');
+    setBulkItems([{ category_id: 0, category: '', description: '', amount: 0 }]);
     setShowCreateModal(true);
   };
 
@@ -463,150 +466,205 @@ export default function ExpensesPage() {
 
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-md">
-            <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-200 dark:border-slate-700">
-              <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
-                Add Expense
-              </h3>
+          <Card className="w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-700">
+              <div>
+                <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+                  Add Bulk Expenses
+                </h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                  Add multiple expense items sharing the same type, date, and payment method.
+                </p>
+              </div>
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 text-xl font-bold p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               >
                 ✕
               </button>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Type
-                </label>
-                <select
-                  value={formData.type}
-                  onChange={(e) => setFormData({ ...formData, type: e.target.value, category_id: undefined, category: '' })}
-                  className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
-                >
-                  <option value="raw_material">Raw Material</option>
-                  <option value="operational">Operational</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Category *
-                </label>
-                <div className="flex gap-2">
-                  <select
-                    value={formData.category_id || ''}
-                    onChange={(e) => {
-                      const id = e.target.value ? parseInt(e.target.value) : undefined;
-                      const name = categories.find((c) => c.id === id)?.name || '';
-                      setFormData({ ...formData, category_id: id, category: name });
-                    }}
-                    className="flex-1 px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="">Select Category</option>
-                    {categories
-                      .filter((c) => c.type === formData.type)
-                      .map((cat) => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </option>
-                      ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCatType(formData.type as 'raw_material' | 'operational');
-                      setShowCategoryModal(true);
-                    }}
-                    className="px-3 py-2 border border-slate-300 hover:border-slate-400 dark:border-slate-600 dark:hover:border-slate-500 rounded-lg text-slate-600 dark:text-slate-400 text-sm flex items-center justify-center whitespace-nowrap"
-                  >
-                    ⚙️ Manage
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Description *
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
-                  placeholder="Expense details"
-                  rows={3}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Payment Method
-                </label>
-                <select
-                  value={formData.payment_method}
-                  onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
-                >
-                  {paymentMethods.length > 0 ? (
-                    paymentMethods.map((method) => (
-                      <option key={method.id} value={method.code}>
-                        {method.name}
-                      </option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="cash">Cash</option>
-                      <option value="transfer">Transfer</option>
-                      <option value="card">Card</option>
-                      <option value="other">Other</option>
-                    </>
-                  )}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Amount *
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                    Expense Type
                   </label>
-                  <input
-                    type="number"
-                    value={formData.amount}
-                    onChange={(e) => setFormData({ ...formData, amount: parseInt(e.target.value) || 0 })}
-                    className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
-                    placeholder="0"
-                  />
+                  <select
+                    value={bulkType}
+                    onChange={(e) => {
+                      const newType = e.target.value;
+                      setBulkType(newType);
+                      setBulkItems(prev => prev.map(item => ({ ...item, category_id: 0, category: '' })));
+                    }}
+                    className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+                  >
+                    <option value="raw_material">Raw Material</option>
+                    <option value="operational">Operational</option>
+                  </select>
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Date *
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                    Date
                   </label>
                   <input
                     type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
+                    value={bulkDate}
+                    onChange={(e) => setBulkDate(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                    Payment Method
+                  </label>
+                  <select
+                    value={bulkPaymentMethod}
+                    onChange={(e) => setBulkPaymentMethod(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+                  >
+                    {paymentMethods.length > 0 ? (
+                      paymentMethods.map((method) => (
+                        <option key={method.id} value={method.code}>
+                          {method.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="cash">Cash</option>
+                        <option value="transfer">Transfer</option>
+                        <option value="card">Card</option>
+                        <option value="other">Other</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-lg font-bold text-slate-900 dark:text-white">Expense Items</h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCatType(bulkType as 'raw_material' | 'operational');
+                      setShowCategoryModal(true);
+                    }}
+                    className="px-3 py-1.5 border border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600 rounded-lg text-slate-600 dark:text-slate-400 text-xs font-semibold flex items-center justify-center whitespace-nowrap bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors shadow-sm"
+                  >
+                    ⚙️ Manage Categories
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {bulkItems.map((item, index) => (
+                    <div
+                      key={index}
+                      className="flex flex-col md:flex-row gap-3 items-start md:items-center bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl relative group hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+                    >
+                      <div className="w-full md:w-1/4">
+                        <label className="block md:hidden text-xs font-medium text-slate-500 mb-1">Category</label>
+                        <select
+                          value={item.category_id || ''}
+                          onChange={(e) => {
+                            const val = e.target.value ? parseInt(e.target.value) : 0;
+                            const name = categories.find((c) => c.id === val)?.name || '';
+                            const newItems = [...bulkItems];
+                            newItems[index] = { ...newItems[index], category_id: val, category: name };
+                            setBulkItems(newItems);
+                          }}
+                          className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${!item.category_id ? 'border-red-300 dark:border-red-900' : 'border-slate-200 dark:border-slate-700'}`}
+                        >
+                          <option value="">Select Category</option>
+                          {categories
+                            .filter((c) => c.type === bulkType)
+                            .map((cat) => (
+                              <option key={cat.id} value={cat.id}>
+                                {cat.name}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+
+                      <div className="w-full md:flex-1">
+                        <label className="block md:hidden text-xs font-medium text-slate-500 mb-1">Description</label>
+                        <input
+                          type="text"
+                          value={item.description}
+                          onChange={(e) => {
+                            const newItems = [...bulkItems];
+                            newItems[index] = { ...newItems[index], description: e.target.value };
+                            setBulkItems(newItems);
+                          }}
+                          placeholder="What was this expense for?"
+                          className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${!item.description.trim() ? 'border-red-300 dark:border-red-900' : 'border-slate-200 dark:border-slate-700'}`}
+                        />
+                      </div>
+
+                      <div className="w-full md:w-1/4">
+                        <label className="block md:hidden text-xs font-medium text-slate-500 mb-1">Amount</label>
+                        <input
+                          type="number"
+                          value={item.amount || ''}
+                          onChange={(e) => {
+                            const newItems = [...bulkItems];
+                            newItems[index] = { ...newItems[index], amount: parseInt(e.target.value) || 0 };
+                            setBulkItems(newItems);
+                          }}
+                          placeholder="Amount in IDR"
+                          className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${item.amount <= 0 ? 'border-red-300 dark:border-red-900' : 'border-slate-200 dark:border-slate-700'}`}
+                        />
+                      </div>
+
+                      <div className="w-full md:w-auto flex justify-end">
+                        <button
+                          type="button"
+                          disabled={bulkItems.length === 1}
+                          onClick={() => {
+                            const newItems = bulkItems.filter((_, i) => i !== index);
+                            setBulkItems(newItems);
+                          }}
+                          className="p-2 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                          title="Remove item"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setBulkItems([...bulkItems, { category_id: 0, category: '', description: '', amount: 0 }])}
+                  className="w-full py-3 border-2 border-dashed border-slate-200 hover:border-blue-400 dark:border-slate-800 dark:hover:border-blue-900 rounded-xl text-slate-600 dark:text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 font-semibold text-sm flex items-center justify-center gap-2 bg-slate-50/50 hover:bg-blue-50/10 dark:bg-slate-900/30 dark:hover:bg-blue-950/10 transition-all"
+                >
+                  ➕ Add Another Item
+                </button>
               </div>
             </div>
 
-            <div className="flex gap-3 mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={submitting}
-                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {submitting ? '⏳ Adding...' : 'Add Expense'}
-              </button>
+            <div className="flex items-center justify-between p-6 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/30">
+              <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                Total ({bulkItems.length} items): <span className="text-blue-500 text-base">{formatCurrency(bulkItems.reduce((sum, item) => sum + item.amount, 0))}</span>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreate}
+                  disabled={submitting}
+                  className="px-6 py-2 text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 rounded-lg shadow-sm hover:shadow transition-all disabled:opacity-50"
+                >
+                  {submitting ? '⏳ Submitting...' : 'Save Expenses'}
+                </button>
+              </div>
             </div>
           </Card>
         </div>

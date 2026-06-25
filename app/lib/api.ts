@@ -569,6 +569,22 @@ export const expensesAPI = {
     });
   },
 
+  bulkCreateExpenses: async (data: {
+    type: string;
+    date: string;
+    payment_method: string;
+    items: Array<{
+      category_id: number;
+      description: string;
+      amount: number;
+    }>;
+  }): Promise<Expense[]> => {
+    return apiCall<Expense[]>('/expenses/bulk', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
   updateExpense: async (id: number, data: {
     type?: string;
     category_id?: number;
