@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { financeAPI, FinanceDashboardData, FinanceCheck } from '@/app/lib/api';
+import { financeAPI, cashOutsAPI, FinanceDashboardData, FinanceCheck, CashOut } from '@/app/lib/api';
 import { Card, Stat, LoadingSkeleton } from '@/app/components/ui';
 import { SimpleDonutChart } from '@/app/components/charts';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
@@ -39,6 +39,25 @@ export default function FinanceDashboardPage() {
   const [checksPage, setChecksPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Cash Outs state
+  const [cashOuts, setCashOuts] = useState<CashOut[]>([]);
+  const [totalCashOuts, setTotalCashOuts] = useState(0);
+  const [cashOutsPage, setCashOutsPage] = useState(1);
+  const [activeTab, setActiveTab] = useState<'audit' | 'cashout'>('audit');
+
+  // Cash Out Form Modal State
+  const [isCashOutModalOpen, setIsCashOutModalOpen] = useState(false);
+  const [cashOutFormData, setCashOutFormData] = useState({
+    category: '',
+    description: '',
+    amount: 0,
+    payment_method: 'cash',
+    date: new Date().toISOString().split('T')[0],
+  });
+  const [cashOutSubmitLoading, setCashOutSubmitLoading] = useState(false);
+  const [cashOutError, setCashOutError] = useState<string | null>(null);
+  const [deletingCashOutId, setDeletingCashOutId] = useState<number | null>(null);
 
   // Filters
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'custom'>('month');
@@ -88,14 +107,17 @@ export default function FinanceDashboardPage() {
         endDate = `${year}-${month}-${day}`;
       }
 
-      const [dashData, checksRes] = await Promise.all([
+      const [dashData, checksRes, cashOutsRes] = await Promise.all([
         financeAPI.getDashboard(startDate || undefined, endDate || undefined),
-        financeAPI.getChecks(checksPage, 8)
+        financeAPI.getChecks(checksPage, 8),
+        cashOutsAPI.getCashOuts(cashOutsPage, 8, startDate || undefined, endDate || undefined)
       ]);
 
       setData(dashData);
       setChecks(checksRes.data);
       setTotalChecks(checksRes.total);
+      setCashOuts(cashOutsRes.data);
+      setTotalCashOuts(cashOutsRes.total);
     } catch (err: any) {
       console.error('Failed to load finance dashboard:', err);
       setError(err.message || 'Gagal memuat data keuangan.');
@@ -106,7 +128,7 @@ export default function FinanceDashboardPage() {
 
   useEffect(() => {
     fetchDashboardData();
-  }, [dateRange, customStartDate, customEndDate, checksPage]);
+  }, [dateRange, customStartDate, customEndDate, checksPage, cashOutsPage]);
 
   // Load expected balance summary when dates change in the Audit Form
   const loadAuditSummary = async () => {
@@ -183,6 +205,52 @@ export default function FinanceDashboardPage() {
     }
   };
 
+  const handleCashOutSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cashOutFormData.category || cashOutFormData.amount <= 0 || !cashOutFormData.payment_method || !cashOutFormData.date) {
+      setCashOutError('Silakan lengkapi semua field yang wajib diisi.');
+      return;
+    }
+    try {
+      setCashOutSubmitLoading(true);
+      setCashOutError(null);
+      await cashOutsAPI.createCashOut({
+        category: cashOutFormData.category,
+        description: cashOutFormData.description,
+        amount: cashOutFormData.amount,
+        payment_method: cashOutFormData.payment_method,
+        date: `${cashOutFormData.date}T00:00:00Z`,
+      });
+      setIsCashOutModalOpen(false);
+      setCashOutFormData({
+        category: '',
+        description: '',
+        amount: 0,
+        payment_method: 'cash',
+        date: new Date().toISOString().split('T')[0],
+      });
+      setCashOutsPage(1);
+      fetchDashboardData();
+    } catch (err: any) {
+      setCashOutError(err.message || 'Gagal menyimpan cash out.');
+    } finally {
+      setCashOutSubmitLoading(false);
+    }
+  };
+
+  const handleDeleteCashOut = async (id: number) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus catatan Cash Out ini?')) return;
+    try {
+      setDeletingCashOutId(id);
+      await cashOutsAPI.deleteCashOut(id);
+      fetchDashboardData();
+    } catch (err: any) {
+      alert(err.message || 'Gagal menghapus cash out.');
+    } finally {
+      setDeletingCashOutId(null);
+    }
+  };
+
   if (loading && !data) {
     return <LoadingSkeleton count={4} />;
   }
@@ -221,11 +289,21 @@ export default function FinanceDashboardPage() {
     };
   });
 
+  const cashOutShareData = (data.cash_out_share || []).map((item, index) => {
+    const colors = ['#f59e0b', '#ec4899', '#8b5cf6', '#ef4444', '#3b82f6'];
+    return {
+      label: item.payment_method ? (item.payment_method === 'cash' ? 'Cash' : item.payment_method === 'qris' ? 'QRIS' : item.payment_method === 'bank_transfer' ? 'Bank Transfer' : item.payment_method.toUpperCase()) : 'Unknown',
+      value: item.total,
+      color: colors[index % colors.length]
+    };
+  });
+
   // Dual area chart data
   const trendData = (data.daily_trend || []).map((point) => ({
     date: formatShortDate(point.date),
     Sales: point.total_sales,
     Expenses: point.total_expenses,
+    CashOut: point.total_cash_out || 0,
   }));
 
   const totalSalesFromShare = (data.sales_share || []).reduce((sum, item) => sum + item.total, 0);
@@ -250,13 +328,22 @@ export default function FinanceDashboardPage() {
             Pantau arus kas, lakukan audit, pencocokan saldo aktual dengan sistem, dan analisa finansial.
           </p>
         </div>
-        <button
-          onClick={openAuditModal}
-          className="btn-primary flex items-center justify-center gap-2 px-5 py-3 rounded-xl shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-95 transition-all duration-200"
-        >
-          <span className="text-lg">⚖️</span>
-          <span className="font-semibold text-sm">Rekonsiliasi Saldo (Audit)</span>
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setIsCashOutModalOpen(true)}
+            className="px-5 py-3 rounded-xl shadow-md border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-855 text-slate-700 dark:text-slate-200 font-semibold text-sm flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all duration-200"
+          >
+            <span className="text-lg">💸</span>
+            <span className="font-semibold text-sm">Catat Cash Out</span>
+          </button>
+          <button
+            onClick={openAuditModal}
+            className="btn-primary flex items-center justify-center gap-2 px-5 py-3 rounded-xl shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-95 transition-all duration-200 bg-blue-500 text-white"
+          >
+            <span className="text-lg">⚖️</span>
+            <span className="font-semibold text-sm">Rekonsiliasi Saldo (Audit)</span>
+          </button>
+        </div>
       </div>
 
       {/* Date Filter Card */}
@@ -335,7 +422,7 @@ export default function FinanceDashboardPage() {
       </div>
 
       {/* Financial Key Performance Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
           <div className="absolute right-[-10px] bottom-[-10px] text-8xl opacity-10 pointer-events-none">💰</div>
           <p className="text-sm font-medium opacity-80">Total Penjualan (Inflow)</p>
@@ -348,11 +435,21 @@ export default function FinanceDashboardPage() {
 
         <div className="bg-gradient-to-br from-red-500 to-rose-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
           <div className="absolute right-[-10px] bottom-[-10px] text-8xl opacity-10 pointer-events-none">💸</div>
-          <p className="text-sm font-medium opacity-80">Total Pengeluaran (Outflow)</p>
+          <p className="text-sm font-medium opacity-80">Total Expense (Beban)</p>
           <h3 className="text-3xl font-extrabold mt-2">{formatCurrency(data.total_expenses)}</h3>
           <div className="mt-4 pt-4 border-t border-white/20 flex justify-between text-xs font-semibold opacity-90">
-            <span>Rasio Beban Operasional:</span>
-            <span>{data.opex_ratio.toFixed(1)}%</span>
+            <span>Kas: {formatCurrency((data.expenses_share || []).filter(e => e.payment_method === 'cash').reduce((sum, e) => sum + e.total, 0))}</span>
+            <span>Rekening: {formatCurrency((data.expenses_share || []).filter(e => e.payment_method !== 'cash').reduce((sum, e) => sum + e.total, 0))}</span>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+          <div className="absolute right-[-10px] bottom-[-10px] text-8xl opacity-10 pointer-events-none">💸</div>
+          <p className="text-sm font-medium opacity-80">Total Cash Out (Outflow)</p>
+          <h3 className="text-3xl font-extrabold mt-2">{formatCurrency(data.total_cash_out || 0)}</h3>
+          <div className="mt-4 pt-4 border-t border-white/20 flex justify-between text-xs font-semibold opacity-90">
+            <span>Kas: {formatCurrency((data.cash_out_share || []).filter(c => c.payment_method === 'cash').reduce((sum, c) => sum + c.total, 0))}</span>
+            <span>Rekening: {formatCurrency((data.cash_out_share || []).filter(c => c.payment_method !== 'cash').reduce((sum, c) => sum + c.total, 0))}</span>
           </div>
         </div>
 
@@ -361,7 +458,7 @@ export default function FinanceDashboardPage() {
           <p className="text-sm font-medium opacity-80">Net Cash Flow (Net Income)</p>
           <h3 className="text-3xl font-extrabold mt-2">{formatCurrency(data.net_cash_flow)}</h3>
           <div className="mt-4 pt-4 border-t border-white/20 flex justify-between text-xs font-semibold opacity-90">
-            <span>Status Kas Operasional:</span>
+            <span>Status Kas:</span>
             <span>{data.net_cash_flow >= 0 ? 'SURPLUS' : 'DEFISIT'}</span>
           </div>
         </div>
@@ -436,8 +533,8 @@ export default function FinanceDashboardPage() {
       <div className="grid grid-cols-1 gap-6">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
           <div className="mb-4">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Aliran Saldo Harian (Sales vs Expenses)</h3>
-            <p className="text-xs text-slate-500">Menampilkan tren pendapatan dan pengeluaran harian operasional toko.</p>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Aliran Saldo Harian (Sales vs Expenses vs Cash Out)</h3>
+            <p className="text-xs text-slate-500">Menampilkan tren pemasukan, pengeluaran expense, dan cash out harian toko.</p>
           </div>
           
           <div className="w-full h-80">
@@ -452,6 +549,10 @@ export default function FinanceDashboardPage() {
                     <linearGradient id="colorExpenses" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
                       <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="colorCashOut" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" className="dark:stroke-slate-800" />
@@ -469,6 +570,7 @@ export default function FinanceDashboardPage() {
                   <Legend verticalAlign="top" height={36} />
                   <Area name="Sales / Saldo Masuk" type="monotone" dataKey="Sales" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorSales)" />
                   <Area name="Expenses / Saldo Keluar" type="monotone" dataKey="Expenses" stroke="#ef4444" strokeWidth={3} fillOpacity={1} fill="url(#colorExpenses)" />
+                  <Area name="Cash Out (Non-Beban)" type="monotone" dataKey="CashOut" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorCashOut)" />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
@@ -480,7 +582,7 @@ export default function FinanceDashboardPage() {
         </div>
       </div>
 
-      {/* Breakdown Donut Charts and Expenses Categories */}
+      {/* Breakdown Donut Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Sales by Payment Method */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
@@ -500,6 +602,17 @@ export default function FinanceDashboardPage() {
           />
         </div>
 
+        {/* Cash Out by Payment Method */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
+          <SimpleDonutChart
+            data={cashOutShareData}
+            title="Breakdown Cash Out"
+            formatValue={formatCurrency}
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Expense Categories */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm flex flex-col">
           <div className="mb-4">
@@ -531,104 +644,246 @@ export default function FinanceDashboardPage() {
             )}
           </div>
         </div>
+
+        {/* Top Cash Out Categories */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm flex flex-col">
+          <div className="mb-4">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Distribusi Cash Out</h3>
+            <p className="text-xs text-slate-500">Distribusi pengeluaran non-expense berdasarkan kategori.</p>
+          </div>
+
+          <div className="flex-1 space-y-4 overflow-y-auto max-h-[300px] pr-1">
+            {data.cash_out_share && data.cash_out_share.length > 0 ? (
+              data.cash_out_share.map((item, i) => {
+                const totalCoVal = data.total_cash_out || 1;
+                const percentage = (item.total / totalCoVal) * 100;
+                return (
+                  <div key={i} className="space-y-1">
+                    <div className="flex justify-between items-center text-xs font-semibold">
+                      <span className="text-slate-700 dark:text-slate-300 truncate max-w-[150px] capitalize">{item.payment_method ? (item.payment_method === 'cash' ? 'Cash' : item.payment_method === 'qris' ? 'QRIS' : item.payment_method === 'bank_transfer' ? 'Bank Transfer' : item.payment_method.toUpperCase()) : 'Unknown'}</span>
+                      <span className="text-slate-950 dark:text-white">{formatCurrency(item.total)} ({percentage.toFixed(0)}%)</span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-100 dark:bg-slate-850 rounded-full overflow-hidden">
+                      <div className="h-full bg-amber-500 rounded-full" style={{ width: `${percentage}%` }} />
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-500 text-sm">
+                Belum ada data cash out.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Reconciliation Audit Log History */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-slate-150 dark:border-slate-800 flex justify-between items-center">
-          <div>
+      {/* Tabs for bottom list */}
+      <div className="flex border-b border-slate-200 dark:border-slate-800">
+        <button
+          onClick={() => setActiveTab('audit')}
+          className={`px-6 py-3 font-semibold text-sm transition-all border-b-2 ${activeTab === 'audit' ? 'border-blue-500 text-blue-600 font-bold' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+        >
+          ⚖️ Audit & Rekonsiliasi
+        </button>
+        <button
+          onClick={() => setActiveTab('cashout')}
+          className={`px-6 py-3 font-semibold text-sm transition-all border-b-2 ${activeTab === 'cashout' ? 'border-blue-500 text-blue-600 font-bold' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+        >
+          💸 Riwayat Cash Out
+        </button>
+      </div>
+
+      {activeTab === 'audit' ? (
+        /* Reconciliation Audit Log History */
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-slate-150 dark:border-slate-800">
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">Riwayat Audit & Rekonsiliasi Saldo</h3>
             <p className="text-xs text-slate-500">Log verifikasi kecocokan kas fisik dan rekening bank.</p>
           </div>
-        </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm whitespace-nowrap">
-            <thead className="bg-slate-50 dark:bg-slate-850 text-slate-500 dark:text-slate-400 font-bold uppercase text-[10px] tracking-wider">
-              <tr>
-                <th className="px-6 py-4">Waktu Audit</th>
-                <th className="px-6 py-4">Periode</th>
-                <th className="px-6 py-4">Kas Fisik (Sistem vs Riil)</th>
-                <th className="px-6 py-4">Kas Rekening (Sistem vs Riil)</th>
-                <th className="px-6 py-4">Selisih Kas</th>
-                <th className="px-6 py-4">Selisih Rekening</th>
-                <th className="px-6 py-4">Auditor</th>
-                <th className="px-6 py-4">Catatan</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-150 dark:divide-slate-800">
-              {checks.length > 0 ? (
-                checks.map((check) => {
-                  const hasDiscrepancy = check.difference_cash !== 0 || check.difference_rekening !== 0;
-                  return (
-                    <tr key={check.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/20 transition-colors">
-                      <td className="px-6 py-4 font-medium text-slate-950 dark:text-white">
-                        {formatDate(check.created_at)}
-                      </td>
-                      <td className="px-6 py-4 text-xs">
-                        {check.start_date.split('T')[0]} s/d {check.end_date.split('T')[0]}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-slate-500">{formatCurrency(check.expected_cash)}</span>
-                        <span className="mx-1 text-slate-400">→</span>
-                        <span className="font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(check.actual_cash)}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-slate-500">{formatCurrency(check.expected_rekening)}</span>
-                        <span className="mx-1 text-slate-400">→</span>
-                        <span className="font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(check.actual_rekening)}</span>
-                      </td>
-                      <td className={`px-6 py-4 font-bold ${check.difference_cash === 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {check.difference_cash > 0 ? '+' : ''}{formatCurrency(check.difference_cash)}
-                      </td>
-                      <td className={`px-6 py-4 font-bold ${check.difference_rekening === 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {check.difference_rekening > 0 ? '+' : ''}{formatCurrency(check.difference_rekening)}
-                      </td>
-                      <td className="px-6 py-4 font-semibold text-slate-800 dark:text-slate-300">
-                        {check.checked_by?.full_name || check.checked_by?.username || 'System'}
-                      </td>
-                      <td className="px-6 py-4 text-slate-600 dark:text-slate-400 max-w-[200px] truncate" title={check.notes}>
-                        {check.notes || '-'}
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead className="bg-slate-50 dark:bg-slate-850 text-slate-500 dark:text-slate-400 font-bold uppercase text-[10px] tracking-wider">
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-slate-500 dark:text-slate-400">
-                    Belum ada riwayat audit keuangan.
-                  </td>
+                  <th className="px-6 py-4">Waktu Audit</th>
+                  <th className="px-6 py-4">Periode</th>
+                  <th className="px-6 py-4">Kas Fisik (Sistem vs Riil)</th>
+                  <th className="px-6 py-4">Kas Rekening (Sistem vs Riil)</th>
+                  <th className="px-6 py-4">Selisih Kas</th>
+                  <th className="px-6 py-4">Selisih Rekening</th>
+                  <th className="px-6 py-4">Auditor</th>
+                  <th className="px-6 py-4">Catatan</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-150 dark:divide-slate-800">
+                {checks.length > 0 ? (
+                  checks.map((check) => {
+                    const hasDiscrepancy = check.difference_cash !== 0 || check.difference_rekening !== 0;
+                    return (
+                      <tr key={check.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/20 transition-colors">
+                        <td className="px-6 py-4 font-medium text-slate-950 dark:text-white">
+                          {formatDate(check.created_at)}
+                        </td>
+                        <td className="px-6 py-4 text-xs">
+                          {check.start_date.split('T')[0]} s/d {check.end_date.split('T')[0]}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-slate-500">{formatCurrency(check.expected_cash)}</span>
+                          <span className="mx-1 text-slate-400">→</span>
+                          <span className="font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(check.actual_cash)}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-slate-500">{formatCurrency(check.expected_rekening)}</span>
+                          <span className="mx-1 text-slate-400">→</span>
+                          <span className="font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(check.actual_rekening)}</span>
+                        </td>
+                        <td className={`px-6 py-4 font-bold ${check.difference_cash === 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {check.difference_cash > 0 ? '+' : ''}{formatCurrency(check.difference_cash)}
+                        </td>
+                        <td className={`px-6 py-4 font-bold ${check.difference_rekening === 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {check.difference_rekening > 0 ? '+' : ''}{formatCurrency(check.difference_rekening)}
+                        </td>
+                        <td className="px-6 py-4 font-semibold text-slate-800 dark:text-slate-300">
+                          {check.checked_by?.full_name || check.checked_by?.username || 'System'}
+                        </td>
+                        <td className="px-6 py-4 text-slate-600 dark:text-slate-400 max-w-[200px] truncate" title={check.notes}>
+                          {check.notes || '-'}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={8} className="text-center py-12 text-slate-500 dark:text-slate-400">
+                      Belum ada riwayat audit keuangan.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
 
-        {/* Pagination */}
-        {totalChecks > 8 && (
-          <div className="p-4 border-t border-slate-150 dark:border-slate-800 flex items-center justify-between">
-            <span className="text-xs text-slate-500">
-              Menampilkan {checks.length} dari {totalChecks} riwayat audit
-            </span>
-            <div className="flex gap-2">
-              <button
-                disabled={checksPage === 1}
-                onClick={() => setChecksPage(prev => prev - 1)}
-                className="px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40"
-              >
-                Sebelumnya
-              </button>
-              <button
-                disabled={checksPage * 8 >= totalChecks}
-                onClick={() => setChecksPage(prev => prev + 1)}
-                className="px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40"
-              >
-                Selanjutnya
-              </button>
+          {/* Pagination */}
+          {totalChecks > 8 && (
+            <div className="p-4 border-t border-slate-150 dark:border-slate-800 flex items-center justify-between">
+              <span className="text-xs text-slate-500">
+                Menampilkan {checks.length} dari {totalChecks} riwayat audit
+              </span>
+              <div className="flex gap-2">
+                <button
+                  disabled={checksPage === 1}
+                  onClick={() => setChecksPage(prev => prev - 1)}
+                  className="px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40"
+                >
+                  Sebelumnya
+                </button>
+                <button
+                  disabled={checksPage * 8 >= totalChecks}
+                  onClick={() => setChecksPage(prev => prev + 1)}
+                  className="px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40"
+                >
+                  Selanjutnya
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Cash Out Log History */
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-slate-150 dark:border-slate-800 flex justify-between items-center">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Riwayat Pengeluaran Non-Expense (Cash Out)</h3>
+              <p className="text-xs text-slate-500">Daftar pengeluaran non-operasional seperti dividen, modal, pinjaman, dsb.</p>
             </div>
           </div>
-        )}
-      </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead className="bg-slate-50 dark:bg-slate-850 text-slate-500 dark:text-slate-400 font-bold uppercase text-[10px] tracking-wider">
+                <tr>
+                  <th className="px-6 py-4">Tanggal</th>
+                  <th className="px-6 py-4">Kategori</th>
+                  <th className="px-6 py-4">Deskripsi</th>
+                  <th className="px-6 py-4">Jumlah (Rp)</th>
+                  <th className="px-6 py-4">Metode Bayar</th>
+                  <th className="px-6 py-4">Oleh</th>
+                  <th className="px-6 py-4 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-150 dark:divide-slate-800">
+                {cashOuts.length > 0 ? (
+                  cashOuts.map((co) => (
+                    <tr key={co.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/20 transition-colors">
+                      <td className="px-6 py-4 font-medium text-slate-950 dark:text-white">
+                        {new Date(co.date).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' })}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 capitalize">
+                          {co.category}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-slate-600 dark:text-slate-400 max-w-[250px] truncate" title={co.description}>
+                        {co.description || '-'}
+                      </td>
+                      <td className="px-6 py-4 font-bold text-slate-900 dark:text-slate-100">
+                        {formatCurrency(co.amount)}
+                      </td>
+                      <td className="px-6 py-4 capitalize font-semibold text-slate-600 dark:text-slate-400">
+                        {co.payment_method === 'bank_transfer' ? 'Bank Transfer' : co.payment_method}
+                      </td>
+                      <td className="px-6 py-4 font-semibold text-slate-800 dark:text-slate-300">
+                        {co.user?.full_name || co.user?.username || 'System'}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={() => handleDeleteCashOut(co.id)}
+                          disabled={deletingCashOutId === co.id}
+                          className="px-3 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 text-red-600 dark:text-red-400 text-xs font-semibold rounded-lg hover:shadow-sm transition-colors disabled:opacity-50"
+                        >
+                          {deletingCashOutId === co.id ? 'Menghapus...' : 'Hapus'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="text-center py-12 text-slate-500 dark:text-slate-400">
+                      Belum ada riwayat cash out.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {totalCashOuts > 8 && (
+            <div className="p-4 border-t border-slate-150 dark:border-slate-800 flex items-center justify-between">
+              <span className="text-xs text-slate-500">
+                Menampilkan {cashOuts.length} dari {totalCashOuts} riwayat cash out
+              </span>
+              <div className="flex gap-2">
+                <button
+                  disabled={cashOutsPage === 1}
+                  onClick={() => setCashOutsPage(prev => prev - 1)}
+                  className="px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40"
+                >
+                  Sebelumnya
+                </button>
+                <button
+                  disabled={cashOutsPage * 8 >= totalCashOuts}
+                  onClick={() => setCashOutsPage(prev => prev + 1)}
+                  className="px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40"
+                >
+                  Selanjutnya
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Audit Reconciliation Modal */}
       {isAuditModalOpen && (
@@ -688,22 +943,36 @@ export default function FinanceDashboardPage() {
                 ) : auditSummary ? (
                   <div className="space-y-6">
                     {/* Period flow summary */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center border-b border-slate-100 dark:border-slate-800 pb-4">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center border-b border-slate-100 dark:border-slate-800 pb-4">
                       <div>
-                        <span className="text-[10px] text-slate-500 uppercase font-bold">Saldo Awal Kas</span>
-                        <p className="text-sm font-bold text-slate-850 dark:text-slate-100 mt-0.5">{formatCurrency(auditSummary.starting_cash)}</p>
+                        <span className="text-[10px] text-slate-500 uppercase font-bold">Saldo Awal (Kas/Rek)</span>
+                        <p className="text-xs font-bold text-slate-850 dark:text-slate-100 mt-0.5">
+                          {formatCurrency(auditSummary.starting_cash + auditSummary.starting_rekening)}
+                        </p>
                       </div>
                       <div>
-                        <span className="text-[10px] text-slate-500 uppercase font-bold">Saldo Awal Rekening</span>
-                        <p className="text-sm font-bold text-slate-850 dark:text-slate-100 mt-0.5">{formatCurrency(auditSummary.starting_rekening)}</p>
+                        <span className="text-[10px] text-slate-500 uppercase font-bold">Sales (Inflow)</span>
+                        <p className="text-xs font-bold text-green-600 mt-0.5">
+                          +{formatCurrency(auditSummary.sales_cash + auditSummary.sales_rekening)}
+                        </p>
                       </div>
                       <div>
-                        <span className="text-[10px] text-slate-500 uppercase font-bold">Pemasukan (Sales)</span>
-                        <p className="text-sm font-bold text-green-600 mt-0.5">+{formatCurrency(auditSummary.sales_cash + auditSummary.sales_rekening)}</p>
+                        <span className="text-[10px] text-slate-500 uppercase font-bold">Beban (Expense)</span>
+                        <p className="text-xs font-bold text-red-500 mt-0.5">
+                          -{formatCurrency(auditSummary.expenses_cash + auditSummary.expenses_rekening)}
+                        </p>
                       </div>
                       <div>
-                        <span className="text-[10px] text-slate-500 uppercase font-bold">Pengeluaran</span>
-                        <p className="text-sm font-bold text-red-500 mt-0.5">-{formatCurrency(auditSummary.expenses_cash + auditSummary.expenses_rekening)}</p>
+                        <span className="text-[10px] text-slate-500 uppercase font-bold">Cash Out (Outflow)</span>
+                        <p className="text-xs font-bold text-amber-500 mt-0.5">
+                          -{formatCurrency((auditSummary.cash_out_cash || 0) + (auditSummary.cash_out_rekening || 0))}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 uppercase font-bold">Saldo Akhir</span>
+                        <p className="text-xs font-bold text-blue-600 mt-0.5">
+                          {formatCurrency(auditSummary.expected_cash + auditSummary.expected_rekening)}
+                        </p>
                       </div>
                     </div>
 
@@ -800,6 +1069,124 @@ export default function FinanceDashboardPage() {
                   className="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold rounded-xl shadow-md hover:shadow-lg transition-all disabled:opacity-40"
                 >
                   {auditSubmitLoading ? 'Menyimpan...' : 'Simpan Verifikasi Audit'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Record Cash Out Modal */}
+      {isCashOutModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-slideUp">
+            {/* Modal Header */}
+            <div className="px-6 py-5 bg-slate-50 dark:bg-slate-850 border-b border-slate-150 dark:border-slate-800 flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white font-extrabold">Catat Cash Out Baru</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Catat pengeluaran non-operasional (seperti dividen, owner withdrawal, dll).</p>
+              </div>
+              <button
+                onClick={() => setIsCashOutModalOpen(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors text-slate-500"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleCashOutSubmit}>
+              <div className="p-6 space-y-4">
+                {cashOutError && (
+                  <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-950 text-red-600 text-xs font-semibold rounded-xl">
+                    {cashOutError}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Kategori Cash Out *</label>
+                  <input
+                    type="text"
+                    required
+                    list="category-suggestions"
+                    value={cashOutFormData.category}
+                    onChange={(e) => setCashOutFormData({ ...cashOutFormData, category: e.target.value })}
+                    placeholder="Contoh: Dividen, Owner Withdrawal, Pinjaman..."
+                    className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
+                  />
+                  <datalist id="category-suggestions">
+                    <option value="Dividen" />
+                    <option value="Owner Withdrawal" />
+                    <option value="Pinjaman" />
+                    <option value="Investasi" />
+                    <option value="Lainnya" />
+                  </datalist>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Jumlah Pengeluaran (Rp) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={cashOutFormData.amount || ''}
+                    onChange={(e) => setCashOutFormData({ ...cashOutFormData, amount: Number(e.target.value) })}
+                    placeholder="Masukkan nominal"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Metode Pembayaran *</label>
+                  <select
+                    value={cashOutFormData.payment_method}
+                    onChange={(e) => setCashOutFormData({ ...cashOutFormData, payment_method: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="qris">QRIS</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Tanggal Transaksi *</label>
+                  <input
+                    type="date"
+                    required
+                    value={cashOutFormData.date}
+                    onChange={(e) => setCashOutFormData({ ...cashOutFormData, date: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Deskripsi / Keterangan</label>
+                  <textarea
+                    value={cashOutFormData.description}
+                    onChange={(e) => setCashOutFormData({ ...cashOutFormData, description: e.target.value })}
+                    placeholder="Tuliskan keterangan detail transaksi..."
+                    rows={3}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 py-4 bg-slate-50 dark:bg-slate-850 border-t border-slate-150 dark:border-slate-800 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsCashOutModalOpen(false)}
+                  className="flex-1 px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-semibold rounded-xl transition-all"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={cashOutSubmitLoading}
+                  className="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold rounded-xl shadow-md hover:shadow-lg transition-all disabled:opacity-40"
+                >
+                  {cashOutSubmitLoading ? 'Menyimpan...' : 'Simpan Transaksi'}
                 </button>
               </div>
             </form>

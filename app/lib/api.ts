@@ -103,6 +103,7 @@ export interface Transaction {
   notes: string;
   created_at: string;
   updated_at: string;
+  deleted_at?: string;
   items: TransactionItem[];
   member_id?: number;
   member?: Member;
@@ -512,6 +513,7 @@ export interface Expense {
   user_id: number;
   created_at: string;
   updated_at: string;
+  deleted_at?: string;
   user?: {
     id: number;
     username: string;
@@ -1131,6 +1133,32 @@ export interface FinanceCheck {
   updated_at: string;
 }
 
+export interface CashOut {
+  id: number;
+  category: string;
+  description: string;
+  amount: number;
+  payment_method: string;
+  date: string;
+  user_id: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+  user?: {
+    id: number;
+    username: string;
+    full_name: string;
+  };
+}
+
+export interface CashOutsResponse {
+  data: CashOut[];
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+}
+
 export interface FinanceSummary {
   start_date: string;
   end_date: string;
@@ -1142,6 +1170,12 @@ export interface FinanceSummary {
   sales_bank_transfer: number;
   expenses_cash: number;
   expenses_rekening: number;
+  cash_out_cash: number;
+  cash_out_rekening: number;
+  cash_out_breakdown: Array<{
+    payment_method: string;
+    total: number;
+  }>;
   expected_cash: number;
   expected_rekening: number;
 }
@@ -1157,6 +1191,7 @@ export interface FinanceCheckResponse {
 export interface FinanceDashboardData {
   total_income: number;
   total_expenses: number;
+  total_cash_out: number;
   net_cash_flow: number;
   expected_cash: number;
   expected_rekening: number;
@@ -1169,12 +1204,17 @@ export interface FinanceDashboardData {
     date: string;
     total_sales: number;
     total_expenses: number;
+    total_cash_out: number;
   }>;
   sales_share: Array<{
     payment_method: string;
     total: number;
   }>;
   expenses_share: Array<{
+    payment_method: string;
+    total: number;
+  }>;
+  cash_out_share: Array<{
     payment_method: string;
     total: number;
   }>;
@@ -1225,4 +1265,52 @@ export const financeAPI = {
     return apiCall<FinanceDashboardData>(endpoint);
   },
 };
+
+// Cash Outs API endpoints
+export const cashOutsAPI = {
+  getCashOuts: async (page: number = 1, limit: number = 10, startDate?: string, endDate?: string, paymentMethod?: string): Promise<CashOutsResponse> => {
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    if (paymentMethod && paymentMethod !== 'all') params.append('payment_method', paymentMethod);
+
+    const endpoint = `/finance/cash-outs?${params.toString()}`;
+    return apiCallPaginated<CashOut>(endpoint);
+  },
+
+  createCashOut: async (data: {
+    category: string;
+    description: string;
+    amount: number;
+    payment_method: string;
+    date: string;
+  }): Promise<CashOut> => {
+    return apiCall<CashOut>('/finance/cash-outs', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateCashOut: async (id: number, data: {
+    category?: string;
+    description?: string;
+    amount?: number;
+    payment_method?: string;
+    date?: string;
+  }): Promise<CashOut> => {
+    return apiCall<CashOut>(`/finance/cash-outs/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteCashOut: async (id: number): Promise<{ message: string }> => {
+    return apiCall<{ message: string }>(`/finance/cash-outs/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
 
